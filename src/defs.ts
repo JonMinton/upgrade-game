@@ -32,7 +32,7 @@ export const TIERS = [
 
 export const SHARDS_PER_UPGRADE = 3;
 export const CHANNEL_TIME = 3;
-export const HOLD_TIME = 10;
+export const FINAL_CHANNEL_TIME = 5;   // the transcendence ritual takes longer
 
 // Spectrum palette: 0-7 normal, 8-15 BRIGHT
 export const SPECTRUM = [
@@ -112,7 +112,7 @@ export interface Vec { x: number; y: number }
 export interface Ent {
   x: number; y: number; facing: number;   // 0 down 1 up 2 left 3 right
   hp: number; tier: number; shards: number;
-  cool: number; channel: number; hold: number; inv: number; regen: number;
+  cool: number; channel: number; inv: number; regen: number;
   animDist: number; stepAcc: number;
   homeX: number; homeY: number; rival: boolean;
 }
@@ -148,6 +148,9 @@ export interface Game {
   camX: number; camY: number;
   hinted3: boolean;
   endTime: number;
+  loseWhy: 'race' | 'derez';
+  winWhy: 'transcend' | 'elimination';
+  winTier: number;   // player tier at the moment of victory (styles the partial screen)
 }
 
 export interface Input { up: boolean; down: boolean; left: boolean; right: boolean; fire: boolean }

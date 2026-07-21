@@ -190,10 +190,10 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
     r.facing = Math.abs(vx) > Math.abs(vy) ? (vx < 0 ? 2 : 3) : (vy < 0 ? 1 : 0);
   }
 
-  // Opportunistic fire
+  // Opportunistic fire — cardinal directions only, same rules as the player.
   if (r.cool <= 0 && distP < 150 && !inSafe(r.x, r.y) && !inSafe(p.x, p.y) && los(g, r.x, r.y, p.x, p.y)) {
-    const jitter = (Math.random() - 0.5) * 0.18;
-    const a = Math.atan2(p.y - r.y, p.x - r.x) + jitter;
-    fire(Math.cos(a), Math.sin(a));
+    const dx = p.x - r.x, dy = p.y - r.y;
+    if (Math.abs(dx) > 2.5 * Math.abs(dy)) fire(Math.sign(dx), 0);
+    else if (Math.abs(dy) > 2.5 * Math.abs(dx)) fire(0, Math.sign(dy));
   }
 }

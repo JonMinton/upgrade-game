@@ -1,7 +1,7 @@
 // Game state and simulation.
 
 import {
-  Game, Ent, Input, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, HOLD_TIME,
+  Game, Ent, Input, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, FINAL_CHANNEL_TIME,
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
 } from './defs';
 import { genWorld, moveEnt, solidPx, solidTile } from './map';
@@ -18,7 +18,7 @@ const MAX_GROUND_SHARDS = 9;
 function makeEnt(x: number, y: number, rival: boolean): Ent {
   return {
     x, y, facing: 0, hp: 3, tier: START_TIER, shards: 0,
-    cool: 0, channel: 0, hold: 0, inv: 0, regen: 0,
+    cool: 0, channel: 0, inv: 0, regen: 0,
     animDist: 0, stepAcc: 0, homeX: x, homeY: y, rival,
   };
 }
@@ -38,7 +38,7 @@ export function newGame(): Game {
       targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0,
     },
     camX: 0, camY: SCR_H * 3,
-    hinted3: false, endTime: 0,
+    hinted3: false, endTime: 0, loseWhy: 'race', winWhy: 'transcend', winTier: WIN_TIER,
   };
   // A modest starting scatter (4 shrines, spread across the map); the rest of
   // the economy comes from respawns, so neither racer can sprint the ladder.
@@ -114,11 +114,21 @@ function dropShards(g: Game, e: Ent): void {
 
 function derez(g: Game, e: Ent): void {
   g.fx.push({ x: e.x, y: e.y, t0: g.time, kind: 0 });
+  // Derezzed at the very floor of history: that entity is finished.
+  if (e.tier === 0) {
+    sfx('derez', e.rival ? g.player.tier : 0, 1);
+    g.mode = e.rival ? 'win' : 'lose';
+    g.loseWhy = 'derez';
+    g.winWhy = 'elimination';
+    g.winTier = g.player.tier;
+    g.endTime = g.time;
+    return;
+  }
   dropShards(g, e);
   e.shards = 0;
   setTier(g, e, Math.max(0, e.tier - 1));
   e.x = e.homeX; e.y = e.homeY;
-  e.hp = 3; e.inv = 2; e.channel = 0; e.hold = 0;
+  e.hp = 3; e.inv = 2; e.channel = 0;
   relSfx(g, 'derez', e.tier, g.player.x, g.player.y);
   msg(g, e.rival ? 'KERNAGH DEREZZED! HE DROPS TO T' + e.tier : 'DEREZZED! YOU FALL TO T' + e.tier, 3);
 }
@@ -149,20 +159,33 @@ function pickups(g: Game, e: Ent): void {
 
 function ritual(g: Game, e: Ent, dt: number): void {
   const near = Math.hypot(e.x - g.world.altarX, e.y - g.world.altarY) < 24;
-  if (near && e.shards >= SHARDS_PER_UPGRADE && e.tier < WIN_TIER) {
+  if (near && e.shards >= SHARDS_PER_UPGRADE) {
+    const needed = e.tier >= WIN_TIER ? FINAL_CHANNEL_TIME : CHANNEL_TIME;
     const before = e.channel;
     e.channel += dt;
     if (Math.floor(e.channel) > Math.floor(before)) {
       relSfx(g, 'ritual', e.tier, e.x, e.y);
     }
-    if (e.channel >= CHANNEL_TIME) {
+    if (e.channel >= needed) {
       e.channel = 0;
       e.shards = 0;
-      setTier(g, e, e.tier + 1);
       g.fx.push({ x: g.world.altarX, y: g.world.altarY, t0: g.time, kind: 2 });
       relSfx(g, 'upgrade', e.tier, e.x, e.y);
+      if (e.tier >= WIN_TIER) {
+        // The final upgrade: transcendence beyond 1995.
+        g.mode = e.rival ? 'lose' : 'win';
+        g.loseWhy = 'race';
+        g.winWhy = 'transcend';
+        g.winTier = g.player.tier;
+        g.endTime = g.time;
+        return;
+      }
+      setTier(g, e, e.tier + 1);
       msg(g, e.rival ? 'KERNAGH ASCENDS TO T' + e.tier + ' ' + tierName(e.tier)
         : 'UPGRADE! T' + e.tier + ' ' + tierName(e.tier), 3.5);
+      if (e.tier >= WIN_TIER && !e.rival) {
+        msg(g, 'ONE FINAL RITUAL REMAINS - 3 MORE SHARDS', 4);
+      }
     }
   } else {
     e.channel = 0;
@@ -244,30 +267,17 @@ export function update(g: Game, inp: Input, dt: number): void {
     }
   }
 
-  // --- Rituals & win hold
+  // --- Rituals (including the final transcendence ritual at T5)
   ritual(g, p, dt);
+  if (g.mode !== 'play') return;
   ritual(g, r, dt);
-  for (const e of [p, r]) {
-    if (e.tier >= WIN_TIER) {
-      e.hold += dt;
-      if (!e.rival || screenOf(r.x, r.y).x === screenOf(p.x, p.y).x) {
-        msg(g, (e.rival ? 'KERNAGH LOCKS THE SIGNAL IN ' : 'SIGNAL LOCK IN ')
-          + Math.ceil(HOLD_TIME - e.hold), 0.3);
-      }
-      if (e.hold >= HOLD_TIME) {
-        g.mode = e.rival ? 'lose' : 'win';
-        g.endTime = g.time;
-        return;
-      }
-    } else {
-      e.hold = 0;
-    }
-  }
+  if (g.mode !== 'play') return;
 
   // Gentle reminder while carrying a full set away from the altar.
-  if (p.shards >= SHARDS_PER_UPGRADE && p.tier < WIN_TIER && g.time > g.msgUntil
+  if (p.shards >= SHARDS_PER_UPGRADE && g.time > g.msgUntil
     && Math.hypot(p.x - g.world.altarX, p.y - g.world.altarY) > 120) {
-    msg(g, 'STONES ARE ' + stonesBearing(g) + ' - CHANNEL THERE', 2);
+    msg(g, (p.tier >= WIN_TIER ? 'THE FINAL RITUAL AWAITS ' : 'STONES ARE ')
+      + stonesBearing(g), 2);
   }
 
   // --- FX cleanup

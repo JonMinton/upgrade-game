@@ -28,10 +28,13 @@ npm install && npm run dev   # then open the printed localhost URL
 ```
 
 Arrows/WASD move, Space (or X) fires, Enter starts. Gather 3 shards, channel for
-3 seconds at the Standing Stones (north of centre) to upgrade a tier. First to hold
-T5 (Amiga) for 10 seconds wins. Get derezzed (3 hits) and you drop a tier, lose your
-shards, and respawn at the village. Home screens (your village, Kernagh's keep) are
-combat-free. Shards regrow at shrines every ~22 s. A river splits the world in
+3 seconds at the Standing Stones (north of centre) to upgrade a tier. Win by
+**transcendence** — at T5, complete one final, longer ritual before Kernagh does —
+or by **elimination** — derez Kernagh while he's already at rock-bottom T0. Get
+derezzed (3 hits) and you drop a tier, lose your shards, and respawn at the
+village; get derezzed at T0 and it's game over. Home screens (your village,
+Kernagh's keep) are combat-free. Shards regrow at shrines every ~22 s. The map
+is fixed across all games — learn it. A river splits the world in
 half, bridged in only two places; hedgerows close many screen borders — watch
 the minimap (bottom right): green is home, cyan is the Standing Stones.
 

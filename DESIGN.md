@@ -143,3 +143,24 @@ increasingly rich stereo samples as he pulls ahead.
   of walking; he dawdles ~5 s after each pickup; intercept gives up after 9 s.
 - **Pacing:** vs an idle player Kernagh wins in ~5 min (one tier/min); shard
   economy trimmed to 4 starting shards + 22 s respawn.
+
+### Playtest round 2 (2026-07-21)
+
+- **No more crossroads:** the wall-to-wall cross paths are gone. Every open
+  screen edge has a single randomly-placed doorway; screens carry internal
+  barrier lines (tree runs, rock ridges, stream spurs off the river) partway
+  through. A flood-fill repair pass proves every shrine, the altar, and both
+  homes reachable at generation time and carves an emergency path if not.
+  The map is FIXED — one hard-coded seed, identical world every game, so
+  familiarity pays off as in Feud.
+- **Two victory types (and their mirrors):**
+  - *Transcendence* (true victory): at T5, gather 3 more shards and complete a
+    longer (5 s) final ritual at the stones. Amiga-style win screen. Kernagh
+    doing it first is the race loss.
+  - *Elimination* (partial victory): derez the opponent while they are already
+    at T0. The partial-victory screen renders at the tier the player actually
+    reached. Mirror: the player derezzed at T0 is "SIGNAL LOST" — game over.
+  This replaces the old passive hold-T5-for-10s win.
+- **Fair fire:** Kernagh now shoots only in the four cardinal directions,
+  like the player, and only when roughly aligned.
+- **T0 shard signalling:** with no colour available, shards blink at ~1.5 Hz.

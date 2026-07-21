@@ -164,9 +164,12 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
     }
   }
 
-  // Shards (world objects: env tier look)
+  // Shards (world objects: env tier look). At T0 there's no colour to signal
+  // with, so they BLINK — the monochrome era's way of saying "look here".
   const spat = shardPat(envTier);
+  const blinkOff = envTier === 0 && Math.floor(g.time * 3) % 2 === 1;
   for (const s of g.shards) {
+    if (blinkOff) break;
     const sx = Math.round(s.x) - 4 - camX, sy = Math.round(s.y) - 4 - camY;
     if (sx < -8 || sy < -8 || sx > SCR_W || sy > SCR_H) continue;
     stampPat(sx, sy, spat);
@@ -589,7 +592,7 @@ function renderTitle(c: CanvasRenderingContext2D, time: number): void {
   drawText(c, 'UPGRADE', Math.floor((CANVAS_W - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
   const lines: [string, string][] = [
     ['ARROWS MOVE - SPACE FIRE', SPECTRUM[15]],
-    ['FIRST TO T5 WINS', SPECTRUM[14]],
+    ['FIRST TO THE FINAL UPGRADE WINS', SPECTRUM[14]],
   ];
   lines.forEach(([s, colr], i) => {
     drawText(c, s, Math.floor((CANVAS_W - textWidth(s)) / 2), 80 + i * 12, colr);
@@ -608,6 +611,35 @@ function renderTitle(c: CanvasRenderingContext2D, time: number): void {
 }
 
 function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: number): void {
+  if (win && g.winWhy === 'elimination') {
+    // Partial victory: Kernagh is gone, but the screen only celebrates at the
+    // fidelity you actually reached.
+    const t = g.winTier;
+    const fg = t === 0 ? '#ffffff' : t <= 2 ? SPECTRUM[15] : THEME[t].hudFg;
+    const acc = t === 0 ? '#ffffff' : t <= 2 ? SPECTRUM[14] : THEME[t].hudAccent;
+    c.fillStyle = t >= 3 ? THEME[t].hudBg : '#000000';
+    c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    if (t <= 2) {
+      for (let i = 0; i < 12; i++) {
+        if (hash(i, 6) > 0.4) {
+          c.fillStyle = t === 0 ? '#ffffff' : SPECTRUM[8 + Math.floor(hash(i, 7) * 7)];
+          c.fillRect(Math.floor(hash(i, 1) * 62) * 4, Math.floor(hash(i, 2) * 46) * 4, 4, 4);
+        }
+      }
+    }
+    drawText(c, 'KERNAGH IS NO MORE', Math.floor((CANVAS_W - textWidth('KERNAGH IS NO MORE', 2)) / 2), 38, fg, 2);
+    drawText(c, 'A PARTIAL VICTORY - THE VALLEY FALLS SILENT',
+      Math.floor((CANVAS_W - textWidth('A PARTIAL VICTORY - THE VALLEY FALLS SILENT')) / 2), 64, acc);
+    const at = `YOU REMAIN AT T${t} ${TIERS[t].name}`;
+    drawText(c, at, Math.floor((CANVAS_W - textWidth(at)) / 2), 78, fg);
+    const mins = Math.floor(g.endTime / 60), secs = Math.floor(g.endTime % 60);
+    drawText(c, `TIME ${mins}:${secs < 10 ? '0' : ''}${secs}`,
+      Math.floor((CANVAS_W - textWidth('TIME 0:00')) / 2), 100, fg);
+    if (Math.floor(time * 2) % 2 === 0) {
+      drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), 130, acc);
+    }
+    return;
+  }
   if (win) {
     const th = THEME[5];
     c.fillStyle = th.hudBg;
@@ -618,9 +650,9 @@ function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: num
       c.fillRect(hash(i, 1) * CANVAS_W, (hash(i, 2) * CANVAS_H + time * (4 + i % 5)) % CANVAS_H, 2, 2);
     }
     c.globalAlpha = 1;
-    drawText(c, 'ASCENSION', Math.floor((CANVAS_W - textWidth('ASCENSION', 3)) / 2), 34, th.hudFg, 3);
-    drawText(c, 'THE FULL 32-COLOUR GLORY OF 1995 IS YOURS',
-      Math.floor((CANVAS_W - textWidth('THE FULL 32-COLOUR GLORY OF 1995 IS YOURS')) / 2), 64, th.hudAccent);
+    drawText(c, 'TRANSCENDENCE', Math.floor((CANVAS_W - textWidth('TRANSCENDENCE', 3)) / 2), 34, th.hudFg, 3);
+    drawText(c, 'THE FINAL UPGRADE - BEYOND 1995 ITSELF',
+      Math.floor((CANVAS_W - textWidth('THE FINAL UPGRADE - BEYOND 1995 ITSELF')) / 2), 64, th.hudAccent);
     drawText(c, 'KERNAGH REMAINS IN THE OLD SIGNAL',
       Math.floor((CANVAS_W - textWidth('KERNAGH REMAINS IN THE OLD SIGNAL')) / 2), 78, th.hudFg);
   } else {
@@ -631,9 +663,12 @@ function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: num
       c.fillStyle = '#ffffff';
       if (hash(i, 4) > 0.5) c.fillRect(Math.floor(hash(i, 1) * 62) * 4, Math.floor(hash(i, 2) * 46) * 4, 4, 4);
     }
-    drawText(c, 'KERNAGH ASCENDS', Math.floor((CANVAS_W - textWidth('KERNAGH ASCENDS', 2)) / 2), 40, '#ffffff', 2);
-    drawText(c, 'YOU ARE LEFT IN THE MONOCHROME OF 1979',
-      Math.floor((CANVAS_W - textWidth('YOU ARE LEFT IN THE MONOCHROME OF 1979')) / 2), 70, '#ffffff');
+    const big = g.loseWhy === 'derez' ? 'SIGNAL LOST' : 'KERNAGH ASCENDS';
+    const sub = g.loseWhy === 'derez'
+      ? 'DEREZZED AT THE FLOOR OF HISTORY'
+      : 'YOU ARE LEFT IN THE MONOCHROME OF 1979';
+    drawText(c, big, Math.floor((CANVAS_W - textWidth(big, 2)) / 2), 40, '#ffffff', 2);
+    drawText(c, sub, Math.floor((CANVAS_W - textWidth(sub)) / 2), 70, '#ffffff');
   }
   const mins = Math.floor(g.endTime / 60), secs = Math.floor(g.endTime % 60);
   const t = `TIME ${mins}:${secs < 10 ? '0' : ''}${secs}`;

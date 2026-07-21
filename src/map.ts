@@ -45,16 +45,6 @@ export function genWorld(): World {
   };
   const get = (tx: number, ty: number) => tiles[ty * WORLD_TW + tx];
 
-  // Cross paths through every screen guarantee connectivity.
-  for (let sy = 0; sy < 4; sy++) {
-    const ty = sy * SCR_TH + 10;
-    for (let tx = 1; tx < WORLD_TW - 1; tx++) { set(tx, ty, Tl.PATH); set(tx, ty + 1, Tl.PATH); }
-  }
-  for (let sx = 0; sx < 6; sx++) {
-    const tx = sx * SCR_TW + 15;
-    for (let ty = 1; ty < WORLD_TH - 1; ty++) { set(tx, ty, Tl.PATH); set(tx + 1, ty, Tl.PATH); }
-  }
-
   const onGrass = (tx: number, ty: number, t: number) => {
     if (tx > 0 && ty > 0 && tx < WORLD_TW - 1 && ty < WORLD_TH - 1 && get(tx, ty) === Tl.GRASS) set(tx, ty, t);
   };
@@ -66,24 +56,37 @@ export function genWorld(): World {
       }
     }
   };
+  // In-screen barrier: a straight run of solid tiles partway across a screen.
+  const barLine = (x0: number, y0: number, horiz: boolean, len: number, t: number) => {
+    for (let i = 0; i < len; i++) onGrass(x0 + (horiz ? i : 0), y0 + (horiz ? 0 : i), t);
+  };
 
   for (let sy = 0; sy < 4; sy++) {
     for (let sx = 0; sx < 6; sx++) {
       const bx = sx * SCR_TW, by = sy * SCR_TH;
       const L = (lx: number, ly: number, t: number) => set(bx + lx, by + ly, t);
+      const rndBar = (t: number) => {
+        const horiz = rng() < 0.5;
+        const len = 5 + Math.floor(rng() * 7);
+        barLine(bx + 2 + Math.floor(rng() * (horiz ? 24 : 28)),
+          by + 2 + Math.floor(rng() * (horiz ? 18 : 12)), horiz, len, t);
+      };
       const reg = region(sx, sy);
       if (reg === 'forest') {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 12; i++) {
           blob(bx + 2 + Math.floor(rng() * 28), by + 2 + Math.floor(rng() * 18), 1 + rng() * 1.6, Tl.TREE);
         }
+        for (let i = 0; i < 3; i++) rndBar(Tl.TREE);
       } else if (reg === 'meadow') {
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < 8; i++) {
           onGrass(bx + 2 + Math.floor(rng() * 28), by + 2 + Math.floor(rng() * 18), rng() < 0.7 ? Tl.TREE : Tl.ROCK);
         }
+        for (let i = 0; i < 2; i++) rndBar(rng() < 0.6 ? Tl.TREE : Tl.ROCK);
       } else if (reg === 'marsh') {
         for (let i = 0; i < 5; i++) {
           blob(bx + 3 + Math.floor(rng() * 26), by + 3 + Math.floor(rng() * 16), 1 + rng() * 1.8, Tl.WATER);
         }
+        for (let i = 0; i < 2; i++) rndBar(Tl.WATER);
         for (let i = 0; i < 16; i++) {
           onGrass(bx + 2 + Math.floor(rng() * 28), by + 2 + Math.floor(rng() * 18), Tl.REED);
         }
@@ -93,22 +96,29 @@ export function genWorld(): World {
         for (let y = 15; y <= 19; y++) for (let x = 4; x <= 10; x++) L(x, y, Tl.HUT);
         L(12, 7, Tl.WELL);
         for (let i = 0; i < 4; i++) onGrass(bx + 20 + Math.floor(rng() * 10), by + 14 + Math.floor(rng() * 6), Tl.TREE);
+        rndBar(Tl.TREE);
       } else if (reg === 'keep') {
+        // Walls drawn with explicit gates (south, west, north).
+        const gate = (lx: number, ly: number) =>
+          (ly === 19 && (lx === 15 || lx === 16)) || (lx === 3 && (ly === 10 || ly === 11))
+          || (ly === 2 && (lx === 15 || lx === 16));
         for (let x = 3; x <= 28; x++) {
-          if (get(bx + x, by + 2) === Tl.GRASS) L(x, 2, Tl.WALL);
-          if (get(bx + x, by + 19) === Tl.GRASS) L(x, 19, Tl.WALL);
+          if (!gate(x, 2)) L(x, 2, Tl.WALL);
+          if (!gate(x, 19)) L(x, 19, Tl.WALL);
         }
         for (let y = 2; y <= 19; y++) {
-          if (get(bx + 3, by + y) === Tl.GRASS) L(3, y, Tl.WALL);
-          if (get(bx + 28, by + y) === Tl.GRASS) L(28, y, Tl.WALL);
+          if (!gate(3, y)) L(3, y, Tl.WALL);
+          if (!gate(28, y)) L(28, y, Tl.WALL);
         }
         for (let y = 4; y <= 17; y++) {
-          if (get(bx + 9, by + y) === Tl.GRASS) L(9, y, Tl.WALL);
-          if (get(bx + 22, by + y) === Tl.GRASS) L(22, y, Tl.WALL);
+          if (y !== 10 && y !== 11) L(9, y, Tl.WALL);
+          if (y !== 13 && y !== 14) L(22, y, Tl.WALL);
         }
         for (let i = 0; i < 5; i++) onGrass(bx + 11 + Math.floor(rng() * 10), by + 4 + Math.floor(rng() * 5), Tl.ROCK);
       } else if (reg === 'stones') {
+        // Ring with two deliberate gaps (entrances SW and NE).
         for (let i = 0; i < 14; i++) {
+          if (i === 3 || i === 10) continue;
           const a = (i / 14) * Math.PI * 2;
           const lx = 16 + Math.round(Math.cos(a) * 7);
           const ly = 11 + Math.round(Math.sin(a) * 5.5);
@@ -120,18 +130,26 @@ export function genWorld(): World {
   }
 
   // --- The maze layer: river + hedgerow barriers between screens.
-  // The river runs the full width between screen rows 1 and 2, bridged only on
-  // the vertical paths of screens sx=1 and sx=4 — Feud's "you can see it but
-  // you can't get there" geography.
   const BRIDGE_COLS = new Set([1 * SCR_TW + 15, 1 * SCR_TW + 16, 4 * SCR_TW + 15, 4 * SCR_TW + 16]);
   for (let ty = 42; ty <= 44; ty++) {
     for (let tx = 1; tx < WORLD_TW - 1; tx++) {
       set(tx, ty, BRIDGE_COLS.has(tx) ? Tl.PATH : Tl.WATER);
     }
   }
+  // Bridge approaches.
+  for (const tx of BRIDGE_COLS) {
+    for (let ty = 40; ty <= 46; ty++) if (get(tx, ty) !== Tl.PATH) set(tx, ty, Tl.PATH);
+  }
+  // Stream spurs: short water barriers running off the river into screens.
+  for (let k = 0; k < 4; k++) {
+    const tx = 12 + Math.floor(rng() * 168);
+    if ([...BRIDGE_COLS].some(b => Math.abs(b - tx) < 5)) continue;
+    const up = rng() < 0.5;
+    const len = 6 + Math.floor(rng() * 8);
+    for (let i = 1; i <= len; i++) onGrass(tx, up ? 42 - i : 44 + i, Tl.WATER);
+  }
 
   // Closed screen edges (hand-picked; the graph stays fully connected).
-  // Horizontal closures: hedge columns between (sx,sy) and (sx+1,sy).
   const closedEW: [number, number][] = [[1, 0], [3, 0], [0, 2], [3, 2], [2, 3]];
   for (const [sx, sy] of closedEW) {
     const tx = (sx + 1) * SCR_TW;
@@ -139,12 +157,37 @@ export function genWorld(): World {
       set(tx - 1, ty, Tl.TREE); set(tx, ty, Tl.TREE);
     }
   }
-  // Vertical closures: hedge rows between (sx,sy) and (sx,sy+1).
   const closedNS: [number, number][] = [[0, 0], [2, 0], [5, 0], [1, 2], [3, 2]];
   for (const [sx, sy] of closedNS) {
     const ty = (sy + 1) * SCR_TH;
     for (let tx = sx * SCR_TW; tx < (sx + 1) * SCR_TW; tx++) {
       set(tx, ty - 1, Tl.TREE); set(tx, ty, Tl.TREE);
+    }
+  }
+
+  // Doorways: every OPEN screen edge gets one randomly-placed gateway instead
+  // of the old wall-to-wall crossroads.
+  const ewClosed = new Set(closedEW.map(([a, b]) => `${a},${b}`));
+  const nsClosed = new Set(closedNS.map(([a, b]) => `${a},${b}`));
+  for (let sy = 0; sy < 4; sy++) {
+    for (let sx = 0; sx < 5; sx++) {
+      if (ewClosed.has(`${sx},${sy}`)) continue;
+      const tx = (sx + 1) * SCR_TW;
+      const ly = sy * SCR_TH + 3 + Math.floor(rng() * (SCR_TH - 8));
+      for (let dx = -2; dx <= 1; dx++) {
+        for (let dy = 0; dy <= 1; dy++) set(tx + dx, ly + dy, Tl.PATH);
+      }
+    }
+  }
+  for (let sy = 0; sy < 3; sy++) {
+    if (sy === 1) continue; // the river boundary: bridges only
+    for (let sx = 0; sx < 6; sx++) {
+      if (nsClosed.has(`${sx},${sy}`)) continue;
+      const ty = (sy + 1) * SCR_TH;
+      const lx = sx * SCR_TW + 3 + Math.floor(rng() * (SCR_TW - 8));
+      for (let dy = -2; dy <= 1; dy++) {
+        for (let dx = 0; dx <= 1; dx++) set(lx + dx, ty + dy, Tl.PATH);
+      }
     }
   }
 
@@ -167,6 +210,45 @@ export function genWorld(): World {
       }
     }
     shrines.push({ x: tx, y: ty });
+  }
+
+  // --- Connectivity repair: the decor is random, so PROVE every point of
+  // interest is walkable from the player's home; carve an emergency path if not.
+  const pTx = 14, pTy = 3 * SCR_TH + 12;
+  const flood = (): Uint8Array => {
+    const reach = new Uint8Array(WORLD_TW * WORLD_TH);
+    const q = [pTy * WORLD_TW + pTx];
+    reach[q[0]] = 1;
+    while (q.length) {
+      const cur = q.pop()!;
+      const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
+        const ni = ny * WORLD_TW + nx;
+        if (!reach[ni] && !SOLID.has(tiles[ni])) { reach[ni] = 1; q.push(ni); }
+      }
+    }
+    return reach;
+  };
+  const pois: Vec[] = [
+    ...shrines,
+    { x: 3 * SCR_TW + 16, y: 11 },                       // altar
+    { x: 5 * SCR_TW + 16, y: 3 * SCR_TH + 14 },          // rival home
+  ];
+  let reach = flood();
+  for (const poi of pois) {
+    if (reach[poi.y * WORLD_TW + poi.x]) continue;
+    // Carve an L-shaped corridor toward home until we touch reached ground.
+    let cx = poi.x, cy = poi.y;
+    let guard = 600;
+    while (!reach[cy * WORLD_TW + cx] && guard-- > 0) {
+      if (SOLID.has(get(cx, cy))) set(cx, cy, Tl.PATH);
+      if (cx !== pTx) cx += Math.sign(pTx - cx);
+      else if (cy !== pTy) cy += Math.sign(pTy - cy);
+      else break;
+    }
+    reach = flood();
   }
 
   const w: World = {
