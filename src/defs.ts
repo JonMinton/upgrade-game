@@ -40,20 +40,21 @@ export const SPECTRUM = [
   '#000000', '#0000ff', '#ff0000', '#ff00ff', '#00ff00', '#00ffff', '#ffff00', '#ffffff',
 ];
 
-// [ink, paper] attribute for each tile type at Spectrum tiers
+// [ink, paper] attribute for each tile type at Spectrum tiers.
+// Black paper throughout: the Spectrum didn't advertise its limitations.
 export const TILE_ATTR: [number, number][] = [];
-TILE_ATTR[Tl.GRASS] = [0, 4];
-TILE_ATTR[Tl.PATH] = [0, 6];
-TILE_ATTR[Tl.TREE] = [0, 4];
+TILE_ATTR[Tl.GRASS] = [4, 0];
+TILE_ATTR[Tl.PATH] = [6, 0];
+TILE_ATTR[Tl.TREE] = [12, 0];
 TILE_ATTR[Tl.WATER] = [15, 1];
-TILE_ATTR[Tl.REED] = [12, 4];
-TILE_ATTR[Tl.WALL] = [0, 7];
-TILE_ATTR[Tl.ROCK] = [7, 4];
-TILE_ATTR[Tl.STONE] = [7, 4];
+TILE_ATTR[Tl.REED] = [12, 0];
+TILE_ATTR[Tl.WALL] = [7, 0];
+TILE_ATTR[Tl.ROCK] = [7, 0];
+TILE_ATTR[Tl.STONE] = [15, 0];
 TILE_ATTR[Tl.ALTAR] = [13, 0];
-TILE_ATTR[Tl.SHRINE] = [14, 4];
-TILE_ATTR[Tl.WELL] = [7, 4];
-TILE_ATTR[Tl.HUT] = [0, 2];
+TILE_ATTR[Tl.SHRINE] = [14, 0];
+TILE_ATTR[Tl.WELL] = [7, 0];
+TILE_ATTR[Tl.HUT] = [10, 0];
 
 // Direct-render colour themes for tiers 3..5
 export interface Theme {
@@ -100,8 +101,9 @@ export const THEME: Record<number, Theme> = {
 export interface Bands { hat: string; skin: string; robe: string; boots: string }
 export const PLAYER_BANDS: Bands = { hat: '#2b3fd6', skin: '#f2c99a', robe: '#3e5be8', boots: '#3a2416' };
 export const RIVAL_BANDS: Bands = { hat: '#8c1e3c', skin: '#e8b98a', robe: '#c23048', boots: '#2b1a10' };
-export const PLAYER_INK = 15;   // bright white
-export const RIVAL_INK = 11;    // bright magenta
+// Two-colour Spectrum sprites: [head ink, body ink]
+export const PLAYER_INKS: [number, number] = [15, 13];  // white head, cyan body
+export const RIVAL_INKS: [number, number] = [14, 11];   // yellow head, magenta body
 export const BOLT_INK = 14;     // bright yellow
 export const SHARD_INK = 13;    // bright cyan
 
@@ -130,10 +132,12 @@ export interface World {
 export interface RivalAI {
   state: string; path: Vec[]; pathI: number; repath: number;
   lastX: number; lastY: number; stuck: number; targetKey: string;
+  interceptT: number; coolUntil: number; pauseUntil: number;
 }
 
 export interface Game {
-  mode: 'title' | 'play' | 'win' | 'lose';
+  mode: 'loading' | 'title' | 'play' | 'win' | 'lose';
+  loadT: number;
   time: number; world: World;
   player: Ent; rival: Ent;
   bolts: Bolt[]; shards: Shard[]; fx: Fx[];

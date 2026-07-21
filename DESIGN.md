@@ -122,3 +122,24 @@ increasingly rich stereo samples as he pulls ahead.
   cassette tape at T0–T2, 3.5" floppy at T3–T4, CD at T5.
 - **Animation frames scale with tier:** T0 static glyph, T1 2-frame walk, T2 4 frames
   (bob variants), T3 pixel-smooth movement, T4–T5 ~8 effective frames plus drop shadow.
+
+### Playtest round 1 (2026-07-21)
+
+- **Maze geography:** a river crosses the world between screen rows 1 and 2,
+  bridged only at two path crossings; hand-picked hedgerows close ten screen
+  edges. All 24 screens remain connected but the village→stones run is now a
+  real journey. Arena stays 6×4 — the maze roughly doubles effective distances,
+  and a larger world would dilute rival encounters (revisit after more play).
+- **Black paper everywhere** at Spectrum tiers; avatars are two-colour sprites
+  (head/body attribute split): player white/cyan, Kernagh yellow/magenta.
+- **Minimap** in the HUD (village green, stones cyan, keep red, current screen
+  blinking) plus compass bearings in shard messages.
+- **Boot sequence:** 3 s simulated tape-load (pilot bars → data bursts), then a
+  minimal title with the credit "JON FABLETON (C) <year>" cycling T0–T5 years
+  at 1 fps through Spectrum ink/paper pairs.
+- **Kernagh's brain:** shard-seeking is nearest-by-walking-distance (BFS flood),
+  not nearest-by-euclid — the straight-line version orbits forever between two
+  equidistant shards on opposite sides of a hedge. Perception capped at 32 tiles
+  of walking; he dawdles ~5 s after each pickup; intercept gives up after 9 s.
+- **Pacing:** vs an idle player Kernagh wins in ~5 min (one tier/min); shard
+  economy trimmed to 4 starting shards + 22 s respawn.

@@ -4,14 +4,14 @@ import {
   Game, Ent, Input, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, HOLD_TIME,
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
 } from './defs';
-import { genWorld, moveEnt, solidPx } from './map';
+import { genWorld, moveEnt, solidPx, solidTile } from './map';
 import { updateRival } from './ai';
 import { sfx, setMusicTier, SfxName } from './audio';
 
 const SPEED = 64;
 const BOLT_SPEED = 150;
 const BOLT_LIFE = 0.9;
-const RESPAWN_EVERY = 18;
+const RESPAWN_EVERY = 22;
 const REGEN_EVERY = 12;
 const MAX_GROUND_SHARDS = 9;
 
@@ -26,21 +26,26 @@ function makeEnt(x: number, y: number, rival: boolean): Ent {
 export function newGame(): Game {
   const world = genWorld();
   const g: Game = {
-    mode: 'title', time: 0, world,
+    mode: 'loading', loadT: 0, time: 0, world,
     player: makeEnt(world.pHomeX, world.pHomeY, false),
     rival: makeEnt(world.rHomeX, world.rHomeY, true),
     bolts: [], shards: [], fx: [],
     respawn: RESPAWN_EVERY,
     msg: '', msgUntil: 0,
     ripple: -1, rippleFrom: START_TIER,
-    ai: { state: 'forage', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0, targetKey: '' },
+    ai: {
+      state: 'forage', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
+      targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0,
+    },
     camX: 0, camY: SCR_H * 3,
     hinted3: false, endTime: 0,
   };
-  // Initial shards on 8 of the 10 shrines (skip the two home-region ones for fairness).
-  world.shrines.forEach((s, i) => {
-    if (i !== 0 && i !== 7) g.shards.push({ x: s.x * TILE + 4, y: s.y * TILE + 4 });
-  });
+  // A modest starting scatter (4 shrines, spread across the map); the rest of
+  // the economy comes from respawns, so neither racer can sprint the ladder.
+  for (const i of [1, 2, 5, 9]) {
+    const s = world.shrines[i];
+    g.shards.push({ x: s.x * TILE + 4, y: s.y * TILE + 4 });
+  }
   return g;
 }
 
@@ -81,11 +86,35 @@ function fire(g: Game, e: Ent, dx: number, dy: number): void {
   relSfx(g, 'zap', e.tier, e.x, e.y);
 }
 
+// Compass bearing from the player to the Standing Stones altar.
+export function stonesBearing(g: Game): string {
+  const dx = g.world.altarX - g.player.x, dy = g.world.altarY - g.player.y;
+  let s = '';
+  if (dy < -40) s += 'N'; else if (dy > 40) s += 'S';
+  if (dx > 40) s += 'E'; else if (dx < -40) s += 'W';
+  return s || 'HERE';
+}
+
+// Drop shards on nearby walkable tiles so they can never land in water/hedges.
+function dropShards(g: Game, e: Ent): void {
+  const tx0 = Math.floor(e.x / TILE), ty0 = Math.floor(e.y / TILE);
+  let left = e.shards;
+  for (let r = 0; r <= 4 && left > 0; r++) {
+    for (let dy = -r; dy <= r && left > 0; dy++) {
+      for (let dx = -r; dx <= r && left > 0; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        if (!solidTile(g.world, tx0 + dx, ty0 + dy)) {
+          g.shards.push({ x: (tx0 + dx) * TILE + 4, y: (ty0 + dy) * TILE + 4 });
+          left--;
+        }
+      }
+    }
+  }
+}
+
 function derez(g: Game, e: Ent): void {
   g.fx.push({ x: e.x, y: e.y, t0: g.time, kind: 0 });
-  for (let i = 0; i < e.shards; i++) {
-    g.shards.push({ x: e.x + (i - 1) * 9, y: e.y + (i % 2) * 8 - 4 });
-  }
+  dropShards(g, e);
   e.shards = 0;
   setTier(g, e, Math.max(0, e.tier - 1));
   e.x = e.homeX; e.y = e.homeY;
@@ -102,12 +131,13 @@ function pickups(g: Game, e: Ent): void {
       g.shards.splice(i, 1);
       e.shards++;
       relSfx(g, 'pickup', e.tier, s.x, s.y);
+      if (e.rival) g.ai.pauseUntil = g.time + 5;  // he potters a while, Leanoric-style
       if (!e.rival) {
         if (e.shards >= SHARDS_PER_UPGRADE && !g.hinted3) {
           g.hinted3 = true;
-          msg(g, '3 SHARDS! CHANNEL AT THE STANDING STONES', 4);
+          msg(g, '3 SHARDS! THE STANDING STONES ARE ' + stonesBearing(g), 4);
         } else if (e.shards >= SHARDS_PER_UPGRADE) {
-          msg(g, 'SHARDS 3/3 - TO THE STONES');
+          msg(g, 'SHARDS 3/3 - STONES ARE ' + stonesBearing(g));
         } else {
           msg(g, 'SHARD ' + e.shards + '/3');
         }
@@ -232,6 +262,12 @@ export function update(g: Game, inp: Input, dt: number): void {
     } else {
       e.hold = 0;
     }
+  }
+
+  // Gentle reminder while carrying a full set away from the altar.
+  if (p.shards >= SHARDS_PER_UPGRADE && p.tier < WIN_TIER && g.time > g.msgUntil
+    && Math.hypot(p.x - g.world.altarX, p.y - g.world.altarY) > 120) {
+    msg(g, 'STONES ARE ' + stonesBearing(g) + ' - CHANNEL THERE', 2);
   }
 
   // --- FX cleanup

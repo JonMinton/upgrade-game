@@ -7,7 +7,7 @@
 import {
   Game, Ent, SCR_W, SCR_H, SCR_TW, SCR_TH, CANVAS_W, CANVAS_H, TILE, Tl, TIERS,
   SPECTRUM, TILE_ATTR, THEME, Theme, PLAYER_BANDS, RIVAL_BANDS, Bands,
-  PLAYER_INK, RIVAL_INK, BOLT_INK, SHARD_INK, CHANNEL_TIME, clamp,
+  PLAYER_INKS, RIVAL_INKS, BOLT_INK, SHARD_INK, CHANNEL_TIME, clamp, screenOf,
 } from './defs';
 import { tileAt } from './map';
 import {
@@ -130,10 +130,10 @@ function drawAvatarDirect(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: n
 function drawAvatarBlocky(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: number): void {
   // A low-tier avatar seen inside a high-tier world: chunky two-colour relic.
   const m = wizMask(e.facing, e.tier === 0 ? 0 : entFrame(e));
-  const col = e.rival ? '#ff5cd0' : '#ffffff';
+  const [headInk, bodyInk] = e.rival ? RIVAL_INKS : PLAYER_INKS;
   drawMaskPixels(c, m, sx + 1, sy + 1, () => '#000000');
-  drawMaskPixels(c, m, sx, sy, () => col);
-  if (e.channel > 0) drawChannelBar(c, e, sx, sy, col);
+  drawMaskPixels(c, m, sx, sy, r => SPECTRUM[e.tier === 0 ? 7 : r < 8 ? headInk : bodyInk]);
+  if (e.channel > 0) drawChannelBar(c, e, sx, sy, SPECTRUM[headInk]);
 }
 
 function drawChannelBar(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: number, col: string): void {
@@ -194,7 +194,14 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
     if (e.tier === 2) { overdraw.push({ e, sx, sy: sy - entBob(e) }); continue; }
     stampMask16(sx, sy, wizMask(e.facing, e.tier === 0 ? 0 : entFrame(e)));
     if (envTier >= 1) {
-      overrideInk(sx, sy, 16, 16, e.tier === 0 ? 7 : (e.rival ? RIVAL_INK : PLAYER_INK));
+      if (e.tier === 0) {
+        overrideInk(sx, sy, 16, 16, 7);
+      } else {
+        // Two-colour Spectrum sprite: body cells first, head cells win the overlap.
+        const [headInk, bodyInk] = e.rival ? RIVAL_INKS : PLAYER_INKS;
+        overrideInk(sx, sy + 8, 16, 8, bodyInk);
+        overrideInk(sx, sy, 16, 8, headInk);
+      }
     }
   }
 
@@ -233,11 +240,12 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
   }
   c.putImageData(img, 0, 0);
 
-  // T2 avatars: sprite hardware escape from the grid — own colour, no clash.
+  // T2 avatars: sprite hardware escape from the grid — own colours, no clash.
   for (const o of overdraw) {
-    const col = SPECTRUM[o.e.rival ? RIVAL_INK : PLAYER_INK];
-    drawMaskPixels(c, wizMask(o.e.facing, entFrame(o.e)), o.sx, o.sy, () => col);
-    if (o.e.channel > 0) drawChannelBar(c, o.e, o.sx, o.sy, col);
+    const [headInk, bodyInk] = o.e.rival ? RIVAL_INKS : PLAYER_INKS;
+    drawMaskPixels(c, wizMask(o.e.facing, entFrame(o.e)), o.sx, o.sy,
+      r => SPECTRUM[r < 8 ? headInk : bodyInk]);
+    if (o.e.channel > 0) drawChannelBar(c, o.e, o.sx, o.sy, SPECTRUM[headInk]);
   }
   // High-tier avatars: full colour intruders in your 8-bit world.
   for (const d of direct) drawAvatarDirect(c, d.e, d.sx - camX, d.sy - camY);
@@ -504,6 +512,25 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
   const mins = Math.floor(g.time / 60), secs = Math.floor(g.time % 60);
   drawText(c, `${mins}:${secs < 10 ? '0' : ''}${secs}`, 236, SCR_H + 2, col.fg);
 
+  // Minimap: 6x4 screen grid. Village green, Standing Stones cyan, keep red,
+  // your current screen blinks white.
+  const cur = screenOf(g.player.x, g.player.y);
+  const mono = envTier === 0;
+  const MM_X = 196, MM_Y = SCR_H + 3;
+  c.fillStyle = '#000000';
+  c.fillRect(MM_X - 1, MM_Y - 1, 6 * 5 + 1, 4 * 3 + 1);
+  for (let sy = 0; sy < 4; sy++) {
+    for (let sx = 0; sx < 6; sx++) {
+      let cc = mono ? '#3c3c3c' : '#303030';
+      if (sx === 0 && sy === 3) cc = mono ? '#909090' : SPECTRUM[4];   // village
+      if (sx === 5 && sy === 3) cc = mono ? '#909090' : SPECTRUM[10];  // keep
+      if (sx === 3 && sy === 0) cc = mono ? '#c0c0c0' : SPECTRUM[13];  // stones
+      if (sx === cur.x && sy === cur.y && Math.floor(g.time * 4) % 2 === 0) cc = '#ffffff';
+      c.fillStyle = cc;
+      c.fillRect(MM_X + sx * 5, MM_Y + sy * 3, 4, 2);
+    }
+  }
+
   if (g.time < g.msgUntil && g.msg) {
     const wpx = textWidth(g.msg);
     const x = Math.floor((CANVAS_W - wpx) / 2);
@@ -524,28 +551,60 @@ function borderStripes(c: CanvasRenderingContext2D, time: number): void {
   }
 }
 
+// Simulated tape load: pilot-tone bars, then fast data stripes, in the border
+// around a pale "Program: upgrade" screen.
+function renderLoading(c: CanvasRenderingContext2D, g: Game, time: number): void {
+  const pilot = g.loadT < 1.2;
+  for (let y = 0; y < CANVAS_H; y += 2) {
+    let col: string;
+    if (pilot) {
+      col = SPECTRUM[Math.floor(y / 6 + time * 16) % 2 ? 13 : 10]; // cyan/red pilot
+    } else {
+      const h = hash(Math.floor(y / 2) + Math.floor(time * 40) * 97, 5);
+      col = SPECTRUM[h > 0.5 ? 9 : 14]; // blue/yellow data bursts
+    }
+    c.fillStyle = col;
+    c.fillRect(0, y, CANVAS_W, 2);
+  }
+  const B = 16;
+  c.fillStyle = SPECTRUM[7];
+  c.fillRect(B, B, CANVAS_W - 2 * B, CANVAS_H - 2 * B);
+  drawText(c, 'PROGRAM: UPGRADE', B + 4, B + 6, '#000000');
+  if (!pilot) {
+    drawText(c, 'BYTES: UPGRADE', B + 4, B + 16, '#000000');
+    const w = Math.floor(((g.loadT - 1.2) / 1.8) * (CANVAS_W - 2 * B - 8));
+    c.fillStyle = '#000000';
+    c.fillRect(B + 4, CANVAS_H - B - 12, w, 4);
+  }
+}
+
+// The credit year walks the tier ladder at 1 fps with cycling attributes.
+const CREDIT_YEARS = ['1979', '1982', '1986', '1987', '1990', '1995'];
+const CREDIT_ATTRS: [number, number][] = [[7, 0], [15, 1], [14, 2], [12, 0], [13, 3], [11, 0]];
+
 function renderTitle(c: CanvasRenderingContext2D, time: number): void {
   c.fillStyle = '#000000';
   c.fillRect(0, 0, CANVAS_W, CANVAS_H);
   borderStripes(c, time);
-  drawText(c, 'UPGRADE', Math.floor((CANVAS_W - textWidth('UPGRADE', 4)) / 2), 22, SPECTRUM[15], 4);
-  drawText(c, 'A RACE THROUGH THE HISTORY OF THE GAME ITSELF',
-    Math.floor((CANVAS_W - textWidth('A RACE THROUGH THE HISTORY OF THE GAME ITSELF')) / 2), 52, SPECTRUM[13]);
+  drawText(c, 'UPGRADE', Math.floor((CANVAS_W - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
   const lines: [string, string][] = [
-    ['ARROWS/WASD MOVE - SPACE FIRE', SPECTRUM[15]],
-    ['GATHER 3 TAPES ◆ AND CHANNEL', SPECTRUM[15]],
-    ['AT THE STANDING STONES (NORTH)', SPECTRUM[15]],
-    ['', ''],
-    ['REACH T5 AMIGA BEFORE KERNAGH', SPECTRUM[14]],
-    ['DEREZZED? YOU FALL BACK A TIER', SPECTRUM[10]],
-    ['NO COMBAT ON HOME SCREENS', SPECTRUM[12]],
+    ['ARROWS MOVE - SPACE FIRE', SPECTRUM[15]],
+    ['FIRST TO T5 WINS', SPECTRUM[14]],
   ];
   lines.forEach(([s, colr], i) => {
-    if (s) drawText(c, s, Math.floor((CANVAS_W - textWidth(s)) / 2), 74 + i * 10, colr);
+    drawText(c, s, Math.floor((CANVAS_W - textWidth(s)) / 2), 80 + i * 12, colr);
   });
   if (Math.floor(time * 2) % 2 === 0) {
-    drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER', 2)) / 2), 156, SPECTRUM[14], 2);
+    drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER', 2)) / 2), 118, SPECTRUM[14], 2);
   }
+  const step = Math.floor(time) % CREDIT_YEARS.length;
+  const credit = `JON FABLETON (C) ${CREDIT_YEARS[step]}`;
+  const [ink, paper] = CREDIT_ATTRS[step];
+  const cw = textWidth(credit);
+  const cx = Math.floor((CANVAS_W - cw) / 2);
+  c.fillStyle = SPECTRUM[paper];
+  c.fillRect(cx - 4, 152, cw + 8, 11);
+  drawText(c, credit, cx, 155, SPECTRUM[ink]);
 }
 
 function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: number): void {
@@ -593,6 +652,7 @@ function renderPlay(c: CanvasRenderingContext2D, g: Game, envTier: number): void
 }
 
 export function render(c: CanvasRenderingContext2D, g: Game, time: number): void {
+  if (g.mode === 'loading') { renderLoading(c, g, time); return; }
   if (g.mode === 'title') { renderTitle(c, time); return; }
   if (g.mode === 'win') { renderEnd(c, g, true, time); return; }
   if (g.mode === 'lose') { renderEnd(c, g, false, time); return; }

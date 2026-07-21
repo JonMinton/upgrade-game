@@ -34,17 +34,28 @@ let g: Game = newGame();
 let last = performance.now();
 let lastFrameAt = performance.now();
 
-// Debug/testing handle (harmless in production).
+// Debug/testing handles (harmless in production).
 (window as unknown as { __game: () => Game }).__game = () => g;
+(window as unknown as { __ff: (s: number) => void }).__ff = (seconds: number) => {
+  const idle: Input = { up: false, down: false, left: false, right: false, fire: false };
+  for (let t = 0; t < seconds && g.mode === 'play'; t += 0.05) update(g, idle, 0.05);
+};
 
 function frame(now: number): void {
   lastFrameAt = now;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
+  if (g.mode === 'loading') {
+    g.loadT += dt;
+    if (g.loadT >= 3) g.mode = 'title';
+  }
+
   if (enterPressed) {
     enterPressed = false;
-    if (g.mode === 'title') {
+    if (g.mode === 'loading') {
+      g.mode = 'title';
+    } else if (g.mode === 'title') {
       g.mode = 'play';
       setTitleMode(false);
       setMusicTier(g.player.tier);

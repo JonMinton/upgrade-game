@@ -119,6 +119,35 @@ export function genWorld(): World {
     }
   }
 
+  // --- The maze layer: river + hedgerow barriers between screens.
+  // The river runs the full width between screen rows 1 and 2, bridged only on
+  // the vertical paths of screens sx=1 and sx=4 — Feud's "you can see it but
+  // you can't get there" geography.
+  const BRIDGE_COLS = new Set([1 * SCR_TW + 15, 1 * SCR_TW + 16, 4 * SCR_TW + 15, 4 * SCR_TW + 16]);
+  for (let ty = 42; ty <= 44; ty++) {
+    for (let tx = 1; tx < WORLD_TW - 1; tx++) {
+      set(tx, ty, BRIDGE_COLS.has(tx) ? Tl.PATH : Tl.WATER);
+    }
+  }
+
+  // Closed screen edges (hand-picked; the graph stays fully connected).
+  // Horizontal closures: hedge columns between (sx,sy) and (sx+1,sy).
+  const closedEW: [number, number][] = [[1, 0], [3, 0], [0, 2], [3, 2], [2, 3]];
+  for (const [sx, sy] of closedEW) {
+    const tx = (sx + 1) * SCR_TW;
+    for (let ty = sy * SCR_TH; ty < (sy + 1) * SCR_TH; ty++) {
+      set(tx - 1, ty, Tl.TREE); set(tx, ty, Tl.TREE);
+    }
+  }
+  // Vertical closures: hedge rows between (sx,sy) and (sx,sy+1).
+  const closedNS: [number, number][] = [[0, 0], [2, 0], [5, 0], [1, 2], [3, 2]];
+  for (const [sx, sy] of closedNS) {
+    const ty = (sy + 1) * SCR_TH;
+    for (let tx = sx * SCR_TW; tx < (sx + 1) * SCR_TW; tx++) {
+      set(tx, ty - 1, Tl.TREE); set(tx, ty, Tl.TREE);
+    }
+  }
+
   // World border
   for (let tx = 0; tx < WORLD_TW; tx++) { set(tx, 0, Tl.TREE); set(tx, WORLD_TH - 1, Tl.TREE); }
   for (let ty = 0; ty < WORLD_TH; ty++) { set(0, ty, Tl.TREE); set(WORLD_TW - 1, ty, Tl.TREE); }
@@ -159,9 +188,11 @@ export function genWorld(): World {
   return w;
 }
 
-// Axis-separated bbox move; half-extent 5px.
+// Axis-separated bbox move. Half-extent 3px: a body centred on a tile centre
+// (±4px to the tile edge) must fit fully inside it, or tile-centre waypoint
+// paths wedge against walls in 1- and 2-tile corridors.
 export function moveEnt(w: World, e: { x: number; y: number }, dx: number, dy: number): number {
-  const H = 5;
+  const H = 3;
   let moved = 0;
   if (dx !== 0) {
     const nx = e.x + dx;
