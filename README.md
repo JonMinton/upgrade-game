@@ -21,6 +21,21 @@ npm run dev      # dev server
 npm run build    # production build to dist/
 ```
 
+## How to play
+
+```sh
+npm install && npm run dev   # then open the printed localhost URL
+```
+
+Arrows/WASD move, Space (or X) fires, Enter starts. Gather 3 shards, channel for
+3 seconds at the Standing Stones (north of centre) to upgrade a tier. First to hold
+T5 (Amiga) for 10 seconds wins. Get derezzed (3 hits) and you drop a tier, lose your
+shards, and respawn at the village. Home screens (your village, Kernagh's keep) are
+combat-free. Shards regrow at shrines every ~18 s.
+
 ## Status
 
-Early design / scaffolding.
+Playable prototype: full tier ladder T0-T5 (attribute-clash Spectrum renderer,
+C64/ST/Amiga direct renderers), chip-synth audio arranged per tier, rival AI,
+combat, ritual upgrades, win/lose flow. Balance tuning constants live at the top
+of `src/game.ts`.

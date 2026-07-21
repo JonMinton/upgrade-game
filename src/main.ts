@@ -1,53 +1,75 @@
-// UPGRADE — entry point.
-// Placeholder scene: proves out the Spectrum-style attribute-cell rendering that
-// tier T1 is built around. Real game loop, map, and entities come next.
+// UPGRADE — entry point: input, loop, mode transitions.
 
-const TIER_NAMES = [
-  "T0 1979 MONO",
-  "T1 SPECTRUM 48K",
-  "T2 SPECTRUM 128",
-  "T3 8-BIT SPRITES",
-  "T4 ST/EGA",
-  "T5 AMIGA",
-] as const;
+import { Game, Input, CANVAS_W, CANVAS_H } from './defs';
+import { newGame, update, msg } from './game';
+import { render } from './render';
+import { initAudio, setTitleMode, setMusicTier } from './audio';
 
-// Spectrum palette: normal then BRIGHT variants.
-const SPECTRUM_INK = [
-  "#000000", "#0000d7", "#d70000", "#d700d7",
-  "#00d700", "#00d7d7", "#d7d700", "#d7d7d7",
-  "#000000", "#0000ff", "#ff0000", "#ff00ff",
-  "#00ff00", "#00ffff", "#ffff00", "#ffffff",
-];
+const canvas = document.getElementById('game') as HTMLCanvasElement;
+canvas.width = CANVAS_W;
+canvas.height = CANVAS_H;
+const ctx = canvas.getContext('2d')!;
+ctx.imageSmoothingEnabled = false;
 
-const CELL = 8; // one attribute cell: 8×8 px, 1 ink + 1 paper colour
+const input: Input = { up: false, down: false, left: false, right: false, fire: false };
+let enterPressed = false;
 
-const canvas = document.getElementById("game") as HTMLCanvasElement;
-const ctx = canvas.getContext("2d")!;
+const KEYMAP: Record<string, keyof Input> = {
+  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+  w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right',
+  ' ': 'fire', x: 'fire', X: 'fire',
+};
 
-function drawAttributeDemo(t: number): void {
-  const cols = canvas.width / CELL;
-  const rows = canvas.height / CELL;
-  for (let cy = 0; cy < rows; cy++) {
-    for (let cx = 0; cx < cols; cx++) {
-      // Each 8×8 cell gets exactly one paper colour — the attribute grid made visible.
-      const wave = Math.sin(cx / 4 + t / 600) + Math.cos(cy / 3 + t / 800);
-      const paper = SPECTRUM_INK[(Math.abs(Math.round(wave * 3)) % 8) + 8];
-      ctx.fillStyle = paper;
-      ctx.fillRect(cx * CELL, cy * CELL, CELL, CELL);
+window.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { enterPressed = true; initAudio(); e.preventDefault(); return; }
+  const k = KEYMAP[e.key];
+  if (k) { input[k] = true; initAudio(); e.preventDefault(); }
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.key];
+  if (k) input[k] = false;
+});
+
+let g: Game = newGame();
+let last = performance.now();
+let lastFrameAt = performance.now();
+
+// Debug/testing handle (harmless in production).
+(window as unknown as { __game: () => Game }).__game = () => g;
+
+function frame(now: number): void {
+  lastFrameAt = now;
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  if (enterPressed) {
+    enterPressed = false;
+    if (g.mode === 'title') {
+      g.mode = 'play';
+      setTitleMode(false);
+      setMusicTier(g.player.tier);
+      msg(g, 'FIND THE SHARDS. KERNAGH SEEKS THEM TOO', 4);
+    } else if (g.mode === 'win' || g.mode === 'lose') {
+      g = newGame();
+      g.mode = 'play';
+      setTitleMode(false);
+      setMusicTier(g.player.tier);
     }
   }
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(4 * CELL, 10 * CELL, 24 * CELL, 3 * CELL);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "8px monospace";
-  ctx.textBaseline = "top";
-  ctx.fillText("UPGRADE", 13 * CELL, 11 * CELL);
-  ctx.fillText(TIER_NAMES[1], 10 * CELL, 12 * CELL);
-}
 
-function frame(t: number): void {
-  drawAttributeDemo(t);
+  update(g, input, dt);
+  if (g.mode === 'title') setTitleMode(true);
+  if (g.mode === 'win') setMusicTier(5);
+  if (g.mode === 'lose') setMusicTier(0);
+  render(ctx, g, now / 1000);
   requestAnimationFrame(frame);
 }
 
 requestAnimationFrame(frame);
+
+// Watchdog: rAF stalls when the window is hidden/occluded; keep the world
+// simulating (at a lower rate) so the game doesn't freeze in the background.
+setInterval(() => {
+  const now = performance.now();
+  if (now - lastFrameAt > 150) frame(now);
+}, 100);

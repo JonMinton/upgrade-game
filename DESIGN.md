@@ -118,3 +118,7 @@ increasingly rich stereo samples as he pulls ahead.
 - **Economy:** slow replenish — fixed shrines, a new shard sprouts every ~45 s at a
   random empty shrine.
 - **Rivals:** one AI nemesis (working name "Kernagh").
+- **Era-appropriate shards:** the storage-media shard renders at the *viewer's* tier —
+  cassette tape at T0–T2, 3.5" floppy at T3–T4, CD at T5.
+- **Animation frames scale with tier:** T0 static glyph, T1 2-frame walk, T2 4 frames
+  (bob variants), T3 pixel-smooth movement, T4–T5 ~8 effective frames plus drop shadow.
