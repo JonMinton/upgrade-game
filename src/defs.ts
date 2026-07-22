@@ -19,9 +19,10 @@ export const Tl = {
   // Home markers: walkable sigils that tell worldFromTiles where each
   // wizard's base is (spawn + safe screen + wand station nearby).
   PBASE: 14, RBASE: 15,
+  RUIN: 16,   // crumbled masonry: solid, but grown in broken runs
 } as const;
 
-export const SOLID = new Set<number>([Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT]);
+export const SOLID = new Set<number>([Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT, Tl.RUIN]);
 
 export const START_TIER = 1;
 export const WIN_TIER = 5;
@@ -63,6 +64,7 @@ TILE_ATTR[Tl.BERRY] = [4, 0];
 TILE_ATTR[Tl.DIRT] = [0, 0];   // bare earth: pure void at Spectrum tiers
 TILE_ATTR[Tl.PBASE] = [13, 0];
 TILE_ATTR[Tl.RBASE] = [11, 0];
+TILE_ATTR[Tl.RUIN] = [7, 0];
 
 // Direct-render colour themes for tiers 3..5
 export interface Theme {
@@ -155,6 +157,7 @@ export interface RivalAI {
   state: string; path: Vec[]; pathI: number; repath: number;
   lastX: number; lastY: number; stuck: number; targetKey: string;
   interceptT: number; coolUntil: number; pauseUntil: number;
+  nearT: number;   // continuous time spent close to the player (encounter cap)
 }
 
 export type Difficulty = 'easy' | 'hard';

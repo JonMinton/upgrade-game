@@ -94,6 +94,77 @@ export function ruleGenTiles(seed: number): Uint8Array {
     }
   }
 
+  // --- Rule 2b: RUINS. Lost settlements seeded by attractors — water is the
+  // strongest draw (rivers meant life), then woodland, then rock — grown in
+  // house-and-street dimensions: dirt lanes with broken-walled houses.
+  const countNear = (x: number, y: number, t: number, r: number): number => {
+    let n = 0;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (get(x + dx, y + dy) === t) n++;
+      }
+    }
+    return n;
+  };
+  const ruinSites: { x: number; y: number; score: number }[] = [];
+  for (let i = 0; i < 60; i++) {
+    const x = 12 + Math.floor(rng() * (WORLD_TW - 24));
+    const y = 9 + Math.floor(rng() * (WORLD_TH - 18));
+    const score = (countNear(x, y, Tl.WATER, 6) > 0 ? 3 : 0)
+      + (countNear(x, y, Tl.TREE, 4) >= 3 ? 2 : 0)
+      + (countNear(x, y, Tl.ROCK, 4) > 0 ? 1 : 0)
+      + rng() * 0.5;
+    ruinSites.push({ x, y, score });
+  }
+  ruinSites.sort((a, b) => b.score - a.score);
+  const ruins: { x: number; y: number }[] = [];
+  for (const site of ruinSites) {
+    if (ruins.length >= 2 + (rng() < 0.5 ? 1 : 0)) break;
+    if (ruins.some(r2 => Math.hypot(r2.x - site.x, r2.y - site.y) < 30)) continue;
+    ruins.push(site);
+  }
+  for (const ru of ruins) {
+    const w = 12 + Math.floor(rng() * 8), h = 8 + Math.floor(rng() * 5);
+    const x0 = ru.x - (w >> 1), y0 = ru.y - (h >> 1);
+    // The settlers cleared this ground long ago.
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) {
+        const t = get(x, y);
+        if (t === Tl.TREE || t === Tl.ROCK || t === Tl.REED) set(x, y, Tl.GRASS);
+      }
+    }
+    // Streets: a horizontal lane, usually a vertical one too.
+    const laneY = y0 + 2 + Math.floor(rng() * (h - 5));
+    for (let x = x0; x < x0 + w; x++) {
+      if (get(x, laneY) === Tl.GRASS) set(x, laneY, Tl.DIRT);
+      if (get(x, laneY + 1) === Tl.GRASS) set(x, laneY + 1, Tl.DIRT);
+    }
+    const laneX = x0 + 2 + Math.floor(rng() * (w - 5));
+    if (rng() < 0.75) {
+      for (let y = y0; y < y0 + h; y++) {
+        if (get(laneX, y) === Tl.GRASS) set(laneX, y, Tl.DIRT);
+        if (get(laneX + 1, y) === Tl.GRASS) set(laneX + 1, y, Tl.DIRT);
+      }
+    }
+    // Houses: broken-walled rectangles beside the lanes, dirt floors inside.
+    const tries = 5 + Math.floor(rng() * 3);
+    for (let hnum = 0; hnum < tries; hnum++) {
+      const hw = 4 + Math.floor(rng() * 3), hh = 3 + Math.floor(rng() * 3);
+      const hx = x0 + Math.floor(rng() * Math.max(1, w - hw));
+      const hy = y0 + Math.floor(rng() * Math.max(1, h - hh));
+      // keep off the lanes
+      if (hy <= laneY + 1 && hy + hh > laneY) continue;
+      for (let y = hy; y < hy + hh; y++) {
+        for (let x = hx; x < hx + hw; x++) {
+          const edge = x === hx || x === hx + hw - 1 || y === hy || y === hy + hh - 1;
+          if (get(x, y) !== Tl.GRASS && get(x, y) !== Tl.DIRT) continue;
+          if (edge) { if (rng() < 0.72) set(x, y, Tl.RUIN); }
+          else set(x, y, Tl.DIRT);
+        }
+      }
+    }
+  }
+
   // --- Rule 5a: bases REPEL each other. Sample candidate sites (away from
   // edges and open water), then take the pair with the greatest separation.
   const clearPatch = (x: number, y: number, r: number) => {
@@ -246,16 +317,68 @@ export function ruleGenTiles(seed: number): Uint8Array {
       else { set(cr.x + i, cr.y, Tl.PATH); set(cr.x + i, cr.y + 1, Tl.PATH); }
     }
   };
-  for (let guard = 0; guard < 10; guard++) {
+  // Reconnect the largest genuinely-unreachable region each pass. A bridge is
+  // only placed when it lands ON that region (measured traversability gain,
+  // not hoped-for gain); when the blockage is trees/rock rather than water,
+  // the villagers cleared a minimal way through themselves (dirt).
+  for (let guard = 0; guard < 16; guard++) {
     const reach = flood(P_HOME.x, P_HOME.y);
-    // biggest unreached gain first: score crossings by whether they join reached to unreached
+    const seen2 = new Uint8Array(WORLD_TW * WORLD_TH);
+    let region: number[] | null = null;
+    for (let i = 0; i < T.length; i++) {
+      if (reach[i] || seen2[i] || SOLID.has(T[i])) continue;
+      const comp: number[] = [];
+      const q = [i];
+      seen2[i] = 1;
+      while (q.length) {
+        const cur = q.pop()!;
+        comp.push(cur);
+        const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
+          const ni = idx(nx, ny);
+          if (!seen2[ni] && !reach[ni] && !SOLID.has(T[ni])) { seen2[ni] = 1; q.push(ni); }
+        }
+      }
+      if (!region || comp.length > region.length) region = comp;
+    }
+    if (!region || region.length < 8) break;
+    const regionSet = new Set(region);
+
+    // Prefer a bridge whose far bank is IN the target region.
     const cands = findCrossings().filter(cr => {
-      const a = cr.vert ? reach[idx(cr.x, cr.y - 1)] : reach[idx(cr.x - 1, cr.y)];
-      const b = cr.vert ? reach[idx(cr.x, cr.y + cr.len)] : reach[idx(cr.x + cr.len, cr.y)];
-      return a !== b;
+      const aI = cr.vert ? idx(cr.x, cr.y - 1) : idx(cr.x - 1, cr.y);
+      const bI = cr.vert ? idx(cr.x, cr.y + cr.len) : idx(cr.x + cr.len, cr.y);
+      return (reach[aI] && regionSet.has(bI)) || (reach[bI] && regionSet.has(aI));
     });
-    if (!cands.length) break;
-    carve(cands.sort((c1, c2) => c1.len - c2.len)[Math.floor(rng() * Math.min(3, cands.length))]);
+    if (cands.length) {
+      carve(cands.sort((c1, c2) => c1.len - c2.len)[0]);
+      continue;
+    }
+
+    // Villager clearing: the shortest run of solid, non-water ground between
+    // the region and already-reached land becomes a dirt cut.
+    let bestCut: number[] | null = null;
+    for (const t of region) {
+      const cx = t % WORLD_TW, cy = (t / WORLD_TW) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const run: number[] = [];
+        for (let k = 1; k <= 7; k++) {
+          const nx = cx + dx * k, ny = cy + dy * k;
+          if (nx < 1 || ny < 1 || nx >= WORLD_TW - 1 || ny >= WORLD_TH - 1) break;
+          const ni = idx(nx, ny);
+          if (!SOLID.has(T[ni])) {
+            if (reach[ni] && run.length > 0 && (!bestCut || run.length < bestCut.length)) bestCut = run.slice();
+            break;
+          }
+          if (T[ni] === Tl.WATER) break;   // water gaps are for bridges
+          run.push(ni);
+        }
+      }
+    }
+    if (!bestCut) break;   // give up; the POI repair pass is the backstop
+    for (const ti of bestCut) T[ti] = Tl.DIRT;
   }
   // Final repair: any POI still cut off (by tree walls, not water) gets a carved path.
   const pois = [...shrines, ...berrySpots, { x: best.x, y: best.y }, R_HOME];

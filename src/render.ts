@@ -441,6 +441,17 @@ function drawTileDirect(
       c.beginPath(); c.arc(x + 4, y + 4, 3, 0, Math.PI * 2); c.stroke();
       c.globalAlpha = 1;
       break;
+    case Tl.RUIN: {
+      // Broken masonry: irregular courses with missing chunks.
+      c.fillStyle = th.wallDark;
+      if ((wtx + wty * 3) % 3 !== 0) c.fillRect(x, y + 1, 7, 3);
+      if ((wtx * 5 + wty) % 4 !== 0) c.fillRect(x + 1, y + 5, 6, 2);
+      c.fillStyle = th.wall;
+      c.fillRect(x + ((wtx * 3) % 3), y + 1, 3, 2);
+      if ((wtx + wty) % 2 === 0) c.fillRect(x + 4, y + 5, 3, 1);
+      if (tier >= 4) { c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(x, y + 7, 8, 1); }
+      break;
+    }
   }
 }
 

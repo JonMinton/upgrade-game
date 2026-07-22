@@ -31,6 +31,12 @@ export function solidPx(w: World, x: number, y: number): boolean {
   return solidTile(w, Math.floor(x / TILE), Math.floor(y / TILE));
 }
 
+// Bolts (and firing sightlines) pass over water but not solid ground cover.
+export function blocksBolt(w: World, x: number, y: number): boolean {
+  const t = tileAt(w, Math.floor(x / TILE), Math.floor(y / TILE));
+  return SOLID.has(t) && t !== Tl.WATER;
+}
+
 const P_HOME_TX = 14, P_HOME_TY = 3 * SCR_TH + 12;
 const R_HOME_TX = 5 * SCR_TW + 16, R_HOME_TY = 3 * SCR_TH + 14;
 
@@ -104,7 +110,7 @@ export function poisReachable(w: World): boolean {
 // The default map: rule-generated from a hand-picked seed whose qualities
 // echo the original hand-authored VALE (SW village, NE keep, full-width
 // mid-river, north stone circle). Deterministic — identical every game.
-export const DEFAULT_MAP_SEED = 72;
+export const DEFAULT_MAP_SEED = 6;
 
 export function genWorld(): World {
   return worldFromTiles(ruleGenTiles(DEFAULT_MAP_SEED));
@@ -342,18 +348,28 @@ export function genClassicWorld(): World {
 // Axis-separated bbox move. Half-extent 3px: a body centred on a tile centre
 // (±4px to the tile edge) must fit fully inside it, or tile-centre waypoint
 // paths wedge against walls in 1- and 2-tile corridors.
-export function moveEnt(w: World, e: { x: number; y: number }, dx: number, dy: number): number {
+// `other` is the opposing wizard: bodies block each other, but only against
+// APPROACHING moves, so overlapping entities can always separate.
+export function moveEnt(
+  w: World, e: { x: number; y: number }, dx: number, dy: number,
+  other?: { x: number; y: number },
+): number {
   const H = 3;
+  const bumps = (nx: number, ny: number): boolean => {
+    if (!other) return false;
+    const dNew = Math.hypot(nx - other.x, ny - other.y);
+    return dNew < 11 && dNew < Math.hypot(e.x - other.x, e.y - other.y);
+  };
   let moved = 0;
   if (dx !== 0) {
     const nx = e.x + dx;
     const ex = nx + Math.sign(dx) * H;
-    if (!solidPx(w, ex, e.y - H) && !solidPx(w, ex, e.y + H)) { e.x = nx; moved += Math.abs(dx); }
+    if (!solidPx(w, ex, e.y - H) && !solidPx(w, ex, e.y + H) && !bumps(nx, e.y)) { e.x = nx; moved += Math.abs(dx); }
   }
   if (dy !== 0) {
     const ny = e.y + dy;
     const ey = ny + Math.sign(dy) * H;
-    if (!solidPx(w, e.x - H, ey) && !solidPx(w, e.x + H, ey)) { e.y = ny; moved += Math.abs(dy); }
+    if (!solidPx(w, e.x - H, ey) && !solidPx(w, e.x + H, ey) && !bumps(e.x, ny)) { e.y = ny; moved += Math.abs(dy); }
   }
   return moved;
 }

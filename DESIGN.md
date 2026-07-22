@@ -297,6 +297,31 @@ increasingly rich stereo samples as he pulls ahead.
   that exact valley. Kept behind the unlock so the first-play experience
   stays simple.
 
+### Playtest round 10 (2026-07-22)
+
+- **Fire crosses water:** bolts (and Kernagh's firing sightlines) pass over
+  rivers and pools; trees, rock, walls and ruins still block them. Rivers are
+  now firing lines as well as barriers.
+- **Bridges must earn their keep:** the generator's reconnection pass now
+  finds the largest genuinely-unreachable walkable region each iteration and
+  only places a bridge whose far bank lands IN that region — measured
+  traversability gain, not hoped-for. When the blockage is trees/rock rather
+  than water, a minimal **villager clearing** (a short dirt cut) is carved
+  through the thinnest point instead, as if the locals opened the way.
+- **Bodies collide:** the wizards can no longer walk through each other
+  (blocked at an 11px gap, approach-only so overlaps always separate), and an
+  **encounter cap** makes Kernagh disengage after ~10-12s glued to the player,
+  reverting to collecting or healing (an active ritual is still always worth
+  breaking).
+- **Ruins:** a new solid terrain type grown by the generator from
+  attractor-scored seeds (water strongest, woodland medium, rock weakest) in
+  house-and-street dimensions — dirt lanes with broken-walled houses (each
+  wall tile ~72% present), interiors of bare earth. Rich both visually and
+  as partial-cover mazes. Paintable in the editor.
+- **Default map re-picked** after the generator changes: GLEN is now seed 6
+  (scanned 100 seeds; best on base separation, mid-river presence, and ruin
+  richness — including a riverbank ruin near the village). Idle-easy ~9.4 min.
+
 ## Future work
 
 - **Server-backed Hall of Signals.** localStorage is per-browser; the plan:

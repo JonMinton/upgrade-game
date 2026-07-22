@@ -1,7 +1,7 @@
 // Kernagh's brain: forage -> ritual -> intercept -> flee, with BFS pathfinding.
 
 import { Game, Vec, TILE, WORLD_TW, WORLD_TH, SHARDS_PER_UPGRADE, WIN_TIER, inSafe } from './defs';
-import { solidTile, solidPx, moveEnt } from './map';
+import { solidTile, moveEnt, blocksBolt } from './map';
 
 const N = WORLD_TW * WORLD_TH;
 const prev = new Int32Array(N);
@@ -92,7 +92,7 @@ function los(g: Game, x0: number, y0: number, x1: number, y1: number): boolean {
   const steps = Math.ceil(d / 4);
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
-    if (solidPx(g.world, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false;
+    if (blocksBolt(g.world, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false;
   }
   return true;
 }
@@ -112,16 +112,30 @@ function berryTarget(g: Game): Vec | null {
 function interceptWorthwhile(g: Game, distP: number): boolean {
   const p = g.player, r = g.rival, ai = g.ai;
   if (inSafe(g.world, p.x, p.y)) return false;
-  if (p.tier >= WIN_TIER) return true;                  // endgame: always contest
-  if (g.difficulty === 'easy') return p.channel > 0 && distP < 200;
-  if (p.channel > 0 && distP < 400) return true;        // break the ritual if reachable
-  return p.shards >= 2 && r.shards < 2 && distP < 220 && g.time > ai.coolUntil;
+  // An active ritual is always worth breaking, even mid-disengage.
+  if (p.channel > 0 && distP < (g.difficulty === 'easy' ? 200 : 400)) return true;
+  if (g.time < ai.coolUntil) return false;              // disengaged: go live your life
+  if (p.tier >= WIN_TIER) return true;                  // endgame: contest the last shards
+  if (g.difficulty === 'easy') return false;
+  return p.shards >= 2 && r.shards < 2 && distP < 220;
 }
 
 export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) => void): void {
   const r = g.rival, p = g.player, ai = g.ai;
   if (r.stun > 0) return;   // frozen or staggered: no thinking, no moving
   const distP = Math.hypot(p.x - r.x, p.y - r.y);
+
+  // Encounter cap: after ~12s glued to the player he disengages and goes
+  // back to collecting or healing for a while.
+  if (distP < 200) {
+    ai.nearT += dt;
+    if (ai.nearT > 12) {
+      ai.nearT = 0;
+      ai.coolUntil = Math.max(ai.coolUntil, g.time + 10);
+    }
+  } else {
+    ai.nearT = Math.max(0, ai.nearT - dt * 2);
+  }
 
   // Channeling at the altar: stand still.
   const nearAltar = Math.hypot(r.x - g.world.altarX, r.y - g.world.altarY) < 24;
@@ -203,7 +217,7 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
   }
   if (vx || vy) {
     const sp = Math.min(64 * dt, wpDist);
-    const m = moveEnt(g.world, r, vx * sp, vy * sp);
+    const m = moveEnt(g.world, r, vx * sp, vy * sp, p);
     r.animDist += m;
     r.stepAcc += m;
     r.facing = Math.abs(vx) > Math.abs(vy) ? (vx < 0 ? 2 : 3) : (vy < 0 ? 1 : 0);

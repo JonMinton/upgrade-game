@@ -20,6 +20,7 @@ const TILE_NAMES: [number, string, string][] = [
   [Tl.SHRINE, 'shrine', '#e8d040'], [Tl.WELL, 'well', '#b8b8c8'], [Tl.HUT, 'hut', '#c05838'],
   [Tl.BERRY, 'berry', '#d04058'],
   [Tl.PBASE, 'p-base', '#40e0e8'], [Tl.RBASE, 'r-base', '#f06078'],
+  [Tl.RUIN, 'ruin', '#77766e'],
 ];
 
 // Point features never take a wide brush; area tiles do.
@@ -72,7 +73,7 @@ const fake: Game = {
   respawn: 99, msg: '', msgUntil: 0, ripple: -1, rippleFrom: 1,
   ai: {
     state: '', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
-    targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0,
+    targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0, nearT: 0,
   },
   camX: 0, camY: 0, hinted3: true, endTime: 0,
   loseWhy: 'race', winWhy: 'transcend', winTier: 5,

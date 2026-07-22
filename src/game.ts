@@ -5,7 +5,7 @@ import {
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
   FREEZE_TIME, STAGGER_TIME,
 } from './defs';
-import { genWorld, worldFromTiles, moveEnt, solidPx, solidTile } from './map';
+import { genWorld, worldFromTiles, moveEnt, solidTile, blocksBolt } from './map';
 import { ruleGenTiles } from './rulegen';
 import { updateRival } from './ai';
 import { sfx, setMusicTier, SfxName } from './audio';
@@ -57,7 +57,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number 
     ripple: -1, rippleFrom: START_TIER,
     ai: {
       state: 'forage', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
-      targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0,
+      targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0, nearT: 0,
     },
     camX: 0, camY: SCR_H * 3,
     hinted3: false, endTime: 0, loseWhy: 'race', winWhy: 'transcend', winTier: WIN_TIER,
@@ -263,7 +263,7 @@ export function update(g: Game, inp: Input, dt: number): void {
   let dy = p.stun > 0 ? 0 : (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
   if (dx && dy) { dx *= 0.7071; dy *= 0.7071; }
   if (dx || dy) {
-    const m = moveEnt(g.world, p, dx * SPEED * dt, dy * SPEED * dt);
+    const m = moveEnt(g.world, p, dx * SPEED * dt, dy * SPEED * dt, r);
     p.animDist += m;
     p.stepAcc += m;
     p.facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 1 : 0);
@@ -309,7 +309,7 @@ export function update(g: Game, inp: Input, dt: number): void {
   for (let i = g.bolts.length - 1; i >= 0; i--) {
     const b = g.bolts[i];
     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-    const gone = b.life <= 0 || solidPx(g.world, b.x, b.y) || inSafe(g.world, b.x, b.y);
+    const gone = b.life <= 0 || blocksBolt(g.world, b.x, b.y) || inSafe(g.world, b.x, b.y);
     let hit = false;
     const victim = b.fromRival ? p : r;
     if (!gone && victim.inv <= 0 && !inSafe(g.world, victim.x, victim.y)
