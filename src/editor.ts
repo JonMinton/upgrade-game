@@ -19,10 +19,11 @@ const TILE_NAMES: [number, string, string][] = [
   [Tl.ROCK, 'rock', '#6a6a72'], [Tl.STONE, 'stone', '#e8e8f0'], [Tl.ALTAR, 'altar', '#40e0e8'],
   [Tl.SHRINE, 'shrine', '#e8d040'], [Tl.WELL, 'well', '#b8b8c8'], [Tl.HUT, 'hut', '#c05838'],
   [Tl.BERRY, 'berry', '#d04058'],
+  [Tl.PBASE, 'p-base', '#40e0e8'], [Tl.RBASE, 'r-base', '#f06078'],
 ];
 
 // Point features never take a wide brush; area tiles do.
-const SINGLE_PLACE = new Set<number>([Tl.SHRINE, Tl.BERRY, Tl.WELL, Tl.ALTAR]);
+const SINGLE_PLACE = new Set<number>([Tl.SHRINE, Tl.BERRY, Tl.WELL, Tl.ALTAR, Tl.PBASE, Tl.RBASE]);
 
 let tiles: Uint8Array;
 try {

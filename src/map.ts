@@ -61,6 +61,8 @@ function scanTiles(tiles: Uint8Array, t: number): Vec[] {
 }
 
 // Build a playable World from a raw tile array (generated or hand-edited).
+// Homes come from PBASE/RBASE marker tiles when present (movable bases);
+// legacy maps without markers fall back to the canonical corners.
 export function worldFromTiles(tiles: Uint8Array): World {
   const altarTiles = scanTiles(tiles, Tl.ALTAR);
   let ax = (3 * SCR_TW + 16) * TILE, ay = 11 * TILE;
@@ -68,23 +70,32 @@ export function worldFromTiles(tiles: Uint8Array): World {
     ax = (altarTiles.reduce((s, v) => s + v.x, 0) / altarTiles.length + 0.5) * TILE;
     ay = (altarTiles.reduce((s, v) => s + v.y, 0) / altarTiles.length + 0.5) * TILE;
   }
+  const pb = scanTiles(tiles, Tl.PBASE)[0];
+  const rb = scanTiles(tiles, Tl.RBASE)[0];
+  const pHomeX = pb ? pb.x * TILE + 4 : P_HOME_TX * TILE;
+  const pHomeY = pb ? pb.y * TILE + 4 : P_HOME_TY * TILE;
+  const rHomeX = rb ? rb.x * TILE + 4 : R_HOME_TX * TILE;
+  const rHomeY = rb ? rb.y * TILE + 4 : R_HOME_TY * TILE;
   return {
     tiles,
     shrines: scanTiles(tiles, Tl.SHRINE),
     berrySpots: scanTiles(tiles, Tl.BERRY),
     altarX: ax, altarY: ay,
-    pHomeX: P_HOME_TX * TILE, pHomeY: P_HOME_TY * TILE,
-    rHomeX: R_HOME_TX * TILE, rHomeY: R_HOME_TY * TILE,
+    pHomeX, pHomeY, rHomeX, rHomeY,
+    pStationX: pHomeX + 3 * TILE, pStationY: pHomeY,
+    rStationX: rHomeX - 3 * TILE, rStationY: rHomeY,
+    pSafe: { x: Math.floor(pHomeX / (SCR_TW * TILE)), y: Math.floor(pHomeY / (SCR_TH * TILE)) },
+    rSafe: { x: Math.floor(rHomeX / (SCR_TW * TILE)), y: Math.floor(rHomeY / (SCR_TH * TILE)) },
   };
 }
 
 // True when every shrine, berry, the altar, and both homes are mutually walkable.
 export function poisReachable(w: World): boolean {
-  const reach = floodFrom(w.tiles, P_HOME_TX, P_HOME_TY);
+  const reach = floodFrom(w.tiles, Math.floor(w.pHomeX / TILE), Math.floor(w.pHomeY / TILE));
   const pois: Vec[] = [
     ...w.shrines, ...w.berrySpots,
     { x: Math.floor(w.altarX / TILE), y: Math.floor(w.altarY / TILE) },
-    { x: R_HOME_TX, y: R_HOME_TY },
+    { x: Math.floor(w.rHomeX / TILE), y: Math.floor(w.rHomeY / TILE) },
   ];
   return pois.every(p => reach[p.y * WORLD_TW + p.x]);
 }
@@ -279,7 +290,8 @@ export function genWorld(): World {
   }
 
   // Clear a patch around homes and the wand stations (a stray tree on a
-  // station tile makes the pedestal unreachable and invisible).
+  // station tile makes the pedestal unreachable and invisible), then plant
+  // the home markers.
   for (const [htx, hty] of [
     [P_HOME_TX, P_HOME_TY], [R_HOME_TX, R_HOME_TY], [17, 3 * SCR_TH + 12], [5 * SCR_TW + 13, 3 * SCR_TH + 14],
   ]) {
@@ -289,6 +301,8 @@ export function genWorld(): World {
       }
     }
   }
+  set(P_HOME_TX, P_HOME_TY, Tl.PBASE);
+  set(R_HOME_TX, R_HOME_TY, Tl.RBASE);
 
   // --- Connectivity repair: PROVE every point of interest is walkable from
   // the player's home; carve an emergency path if not.

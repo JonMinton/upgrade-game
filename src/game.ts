@@ -3,7 +3,7 @@
 import {
   Game, Ent, Input, World, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, FINAL_CHANNEL_TIME,
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
-  FREEZE_TIME, STAGGER_TIME, P_STATION,
+  FREEZE_TIME, STAGGER_TIME,
 } from './defs';
 import { genWorld, worldFromTiles, moveEnt, solidPx, solidTile } from './map';
 import { updateRival } from './ai';
@@ -106,7 +106,7 @@ export function finalScore(g: Game): number {
 }
 
 function fire(g: Game, e: Ent, dx: number, dy: number): void {
-  if (e.cool > 0 || inSafe(e.x, e.y)) return;
+  if (e.cool > 0 || inSafe(g.world, e.x, e.y)) return;
   e.cool = 1.0;
   const d = Math.hypot(dx, dy) || 1;
   g.bolts.push({
@@ -264,14 +264,14 @@ export function update(g: Game, inp: Input, dt: number): void {
     if (p.stepAcc > 11) { p.stepAcc = 0; sfx('step', p.tier, 1); }
   }
   if (inp.fire && p.cool <= 0 && p.stun <= 0) {
-    if (inSafe(p.x, p.y)) { sfx('deny', p.tier, 0.7); p.cool = 0.4; }
+    if (inSafe(g.world, p.x, p.y)) { sfx('deny', p.tier, 0.7); p.cool = 0.4; }
     else { const v = FACING_VECS[p.facing]; fire(g, p, v[0], v[1]); }
   }
 
   // --- Wand station: walk onto your village pedestal to swap fire <-> ice.
   // Latch on entering 10px, release only past 16px — the release radius must
   // EXCEED the trigger radius or walking in arms the latch before the trigger.
-  const stD = Math.hypot(P_STATION.x - p.x, P_STATION.y - p.y);
+  const stD = Math.hypot(g.world.pStationX - p.x, g.world.pStationY - p.y);
   if (stD < 10 && !p.onStation) {
     p.onStation = true;
     p.wand = p.wand === 'fire' ? 'ice' : 'fire';
@@ -303,10 +303,10 @@ export function update(g: Game, inp: Input, dt: number): void {
   for (let i = g.bolts.length - 1; i >= 0; i--) {
     const b = g.bolts[i];
     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-    const gone = b.life <= 0 || solidPx(g.world, b.x, b.y) || inSafe(b.x, b.y);
+    const gone = b.life <= 0 || solidPx(g.world, b.x, b.y) || inSafe(g.world, b.x, b.y);
     let hit = false;
     const victim = b.fromRival ? p : r;
-    if (!gone && victim.inv <= 0 && !inSafe(victim.x, victim.y)
+    if (!gone && victim.inv <= 0 && !inSafe(g.world, victim.x, victim.y)
       && Math.hypot(b.x - victim.x, b.y - victim.y) < 8) {
       hit = true;
       victim.channel = 0;

@@ -261,9 +261,21 @@ increasingly rich stereo samples as he pulls ahead.
      walkable region remains unreachable from the player's home.
   7. A final repair pass guarantees every shrine, berry, the altar and the
      keep are walkable (verified across seeds).
-  Bases stay at the canonical corners for now because the engine pins homes
-  there; true mutually-repelling base placement needs home-marker tiles —
-  listed under future work.
+  Bases stayed at the canonical corners in the first iteration; see round 8.
+
+### Playtest round 8 (2026-07-22)
+
+- **Movable, mutually-repelling bases.** New walkable marker tiles PBASE and
+  RBASE tell `worldFromTiles` where each wizard's base is; homes, wand
+  stations (+3 tiles east of the village sigil, −3 west of the keep's), safe
+  screens, and the minimap highlights are all derived from the markers.
+  Legacy maps without markers fall back to the canonical corners. The rule
+  generator now samples ~30 candidate sites (away from edges and water) and
+  takes the pair with the greatest separation; the more south-westerly one
+  becomes the village. Verified end-to-end: a generated map with the village
+  in the north-west corner plays a complete game.
+- Markers are paintable in the editor (p-base / r-base), so hand-made maps
+  can place bases anywhere too.
 
 ## Future work
 
@@ -279,10 +291,6 @@ increasingly rich stereo samples as he pulls ahead.
   rather than trust the name alone.
 - **Kernagh learns the icewand** (he currently always carries fire).
 - Possible 7×5 arena if the 6×4 maze starts feeling small.
-- **Movable, mutually-repelling bases** in the rule generator: needs
-  home-marker tiles (or a map metadata block) so `worldFromTiles` can derive
-  home/station positions instead of pinning them to the corners; then base
-  placement becomes the same candidate-scoring rule the stone circle uses.
 - **More generator rules to explore:** paths that grow between POIs along
   near-optimal walking routes (desire lines); clearings around shrines;
   river fords vs bridges; biome-consistent screen naming for the minimap.

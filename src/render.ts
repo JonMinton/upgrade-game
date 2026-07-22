@@ -8,7 +8,6 @@ import {
   Game, Ent, SCR_W, SCR_H, SCR_TW, SCR_TH, CANVAS_W, CANVAS_H, TILE, Tl, TIERS,
   SPECTRUM, TILE_ATTR, THEME, Theme, PLAYER_BANDS, RIVAL_BANDS, Bands,
   PLAYER_INKS, RIVAL_INKS, BOLT_INK, SHARD_INK, CHANNEL_TIME, clamp, screenOf,
-  P_STATION, R_STATION,
 } from './defs';
 import { tileAt } from './map';
 import {
@@ -226,7 +225,7 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
   });
 
   // Wand-swap stations: pedestal glyph shows the wand you'd swap TO.
-  for (const [st, owner] of [[P_STATION, g.player], [R_STATION, g.rival]] as const) {
+  for (const [st, owner] of [[{x: g.world.pStationX, y: g.world.pStationY}, g.player], [{x: g.world.rStationX, y: g.world.rStationY}, g.rival]] as const) {
     const sx = Math.round(st.x) - 4 - camX, sy = Math.round(st.y) - 4 - camY;
     if (sx < -12 || sy < -12 || sx > SCR_W || sy > SCR_H) continue;
     const icePickup = owner.wand === 'fire';
@@ -435,6 +434,13 @@ function drawTileDirect(
         c.fillRect(x + ((wtx * 3) % 6), y + ((wty * 5) % 6), 2, 1);
       }
       break;
+    case Tl.PBASE:
+    case Tl.RBASE:
+      c.strokeStyle = t === Tl.PBASE ? th.altarGlow : '#f06078';
+      c.globalAlpha = 0.8;
+      c.beginPath(); c.arc(x + 4, y + 4, 3, 0, Math.PI * 2); c.stroke();
+      c.globalAlpha = 1;
+      break;
   }
 }
 
@@ -510,7 +516,7 @@ function directRender(c: CanvasRenderingContext2D, g: Game, envTier: number): vo
   });
 
   // Wand-swap stations
-  for (const [st, owner] of [[P_STATION, g.player], [R_STATION, g.rival]] as const) {
+  for (const [st, owner] of [[{x: g.world.pStationX, y: g.world.pStationY}, g.player], [{x: g.world.rStationX, y: g.world.rStationY}, g.rival]] as const) {
     const sx = Math.round(st.x) - 4 - camX, sy = Math.round(st.y) - 4 - camY;
     if (sx < -14 || sy < -14 || sx > SCR_W || sy > SCR_H) continue;
     const icePickup = owner.wand === 'fire';
@@ -620,6 +626,7 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
   // Minimap: 6x4 screen grid. Village green, Standing Stones cyan, keep red,
   // your current screen blinks white.
   const cur = screenOf(g.player.x, g.player.y);
+  const stonesScr = screenOf(g.world.altarX, g.world.altarY);
   const mono = envTier === 0;
   const MM_X = 196, MM_Y = SCR_H + 3;
   c.fillStyle = '#000000';
@@ -627,9 +634,9 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
   for (let sy = 0; sy < 4; sy++) {
     for (let sx = 0; sx < 6; sx++) {
       let cc = mono ? '#3c3c3c' : '#303030';
-      if (sx === 0 && sy === 3) cc = mono ? '#909090' : SPECTRUM[4];   // village
-      if (sx === 5 && sy === 3) cc = mono ? '#909090' : SPECTRUM[10];  // keep
-      if (sx === 3 && sy === 0) cc = mono ? '#c0c0c0' : SPECTRUM[13];  // stones
+      if (sx === g.world.pSafe.x && sy === g.world.pSafe.y) cc = mono ? '#909090' : SPECTRUM[4];   // village
+      if (sx === g.world.rSafe.x && sy === g.world.rSafe.y) cc = mono ? '#909090' : SPECTRUM[10];  // keep
+      if (sx === stonesScr.x && sy === stonesScr.y) cc = mono ? '#c0c0c0' : SPECTRUM[13];          // stones
       if (sx === cur.x && sy === cur.y && Math.floor(g.time * 4) % 2 === 0) cc = '#ffffff';
       c.fillStyle = cc;
       c.fillRect(MM_X + sx * 5, MM_Y + sy * 3, 4, 2);

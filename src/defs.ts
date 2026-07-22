@@ -16,6 +16,9 @@ export const Tl = {
   GRASS: 0, PATH: 1, TREE: 2, WATER: 3, REED: 4, WALL: 5,
   ROCK: 6, STONE: 7, ALTAR: 8, SHRINE: 9, WELL: 10, HUT: 11, BERRY: 12,
   DIRT: 13,
+  // Home markers: walkable sigils that tell worldFromTiles where each
+  // wizard's base is (spawn + safe screen + wand station nearby).
+  PBASE: 14, RBASE: 15,
 } as const;
 
 export const SOLID = new Set<number>([Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT]);
@@ -58,6 +61,8 @@ TILE_ATTR[Tl.WELL] = [7, 0];
 TILE_ATTR[Tl.HUT] = [10, 0];
 TILE_ATTR[Tl.BERRY] = [4, 0];
 TILE_ATTR[Tl.DIRT] = [0, 0];   // bare earth: pure void at Spectrum tiers
+TILE_ATTR[Tl.PBASE] = [13, 0];
+TILE_ATTR[Tl.RBASE] = [11, 0];
 
 // Direct-render colour themes for tiers 3..5
 export interface Theme {
@@ -131,10 +136,6 @@ export interface Bolt {
 
 export const FREEZE_TIME = 3.5;   // icewand freeze
 export const STAGGER_TIME = 0.4;  // firewand stun
-
-// Wand-swap stations, one per home village (world px).
-export const P_STATION = { x: (0 * 32 + 17) * TILE + 4, y: (3 * 22 + 12) * TILE + 4 };
-export const R_STATION = { x: (5 * 32 + 13) * TILE + 4, y: (3 * 22 + 14) * TILE + 4 };
 export interface Shard { x: number; y: number }
 export interface Fx { x: number; y: number; t0: number; kind: number } // 0 derez, 1 spawn, 2 upgrade
 
@@ -145,6 +146,9 @@ export interface World {
   altarX: number; altarY: number;   // px
   pHomeX: number; pHomeY: number;
   rHomeX: number; rHomeY: number;
+  pStationX: number; pStationY: number;   // wand stations (px), near each home
+  rStationX: number; rStationY: number;
+  pSafe: Vec; rSafe: Vec;      // safe (combat-free) screen coords per base
 }
 
 export interface RivalAI {
@@ -188,9 +192,9 @@ export function screenOf(x: number, y: number): Vec {
   return { x: Math.floor(x / SCR_W), y: Math.floor(y / SCR_H) };
 }
 
-export function inSafe(x: number, y: number): boolean {
+export function inSafe(w: World, x: number, y: number): boolean {
   const s = screenOf(x, y);
-  return (s.x === 0 && s.y === 3) || (s.x === 5 && s.y === 3);
+  return (s.x === w.pSafe.x && s.y === w.pSafe.y) || (s.x === w.rSafe.x && s.y === w.rSafe.y);
 }
 
 export function clamp(v: number, a: number, b: number): number {

@@ -111,7 +111,7 @@ function berryTarget(g: Game): Vec | null {
 // In easy mode he only contests the endgame and nearby rituals.
 function interceptWorthwhile(g: Game, distP: number): boolean {
   const p = g.player, r = g.rival, ai = g.ai;
-  if (inSafe(p.x, p.y)) return false;
+  if (inSafe(g.world, p.x, p.y)) return false;
   if (p.tier >= WIN_TIER) return true;                  // endgame: always contest
   if (g.difficulty === 'easy') return p.channel > 0 && distP < 200;
   if (p.channel > 0 && distP < 400) return true;        // break the ritual if reachable
@@ -211,7 +211,7 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
 
   // Opportunistic fire — cardinal directions only, same rules as the player.
   // Degraded Kernagh hesitates and often lets the shot go.
-  if (r.cool <= 0 && distP < 150 && !inSafe(r.x, r.y) && !inSafe(p.x, p.y) && los(g, r.x, r.y, p.x, p.y)) {
+  if (r.cool <= 0 && distP < 150 && !inSafe(g.world, r.x, r.y) && !inSafe(g.world, p.x, p.y) && los(g, r.x, r.y, p.x, p.y)) {
     if (g.difficulty === 'easy' && Math.random() < 0.45) {
       r.cool = 0.6;
     } else {

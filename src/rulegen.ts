@@ -12,10 +12,7 @@
 //      unreachable, then one "efficiency" bridge if it shortens the base-to-base
 //      walk substantially.
 
-import { WORLD_TW, WORLD_TH, SCR_TW, SCR_TH, Tl, SOLID } from './defs';
-
-const P_HOME = { x: 14, y: 3 * SCR_TH + 12 };
-const R_HOME = { x: 5 * SCR_TW + 16, y: 3 * SCR_TH + 14 };
+import { WORLD_TW, WORLD_TH, Tl, SOLID } from './defs';
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -97,7 +94,8 @@ export function ruleGenTiles(seed: number): Uint8Array {
     }
   }
 
-  // --- Bases (fixed corners while the engine keeps homes there)
+  // --- Rule 5a: bases REPEL each other. Sample candidate sites (away from
+  // edges and open water), then take the pair with the greatest separation.
   const clearPatch = (x: number, y: number, r: number) => {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
@@ -105,12 +103,38 @@ export function ruleGenTiles(seed: number): Uint8Array {
       }
     }
   };
+  const nearWater = (x: number, y: number, r: number): boolean => {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (get(x + dx, y + dy) === Tl.WATER) return true;
+      }
+    }
+    return false;
+  };
+  const candidates: { x: number; y: number }[] = [];
+  for (let i = 0; i < 60 && candidates.length < 30; i++) {
+    const x = 13 + Math.floor(rng() * (WORLD_TW - 26));
+    const y = 9 + Math.floor(rng() * (WORLD_TH - 18));
+    if (!nearWater(x, y, 6)) candidates.push({ x, y });
+  }
+  if (candidates.length < 2) candidates.push({ x: 14, y: WORLD_TH - 12 }, { x: WORLD_TW - 16, y: WORLD_TH - 10 });
+  let P_HOME = candidates[0], R_HOME = candidates[1], bestD = -1;
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      const d = Math.hypot(candidates[i].x - candidates[j].x, candidates[i].y - candidates[j].y);
+      if (d > bestD) { bestD = d; P_HOME = candidates[i]; R_HOME = candidates[j]; }
+    }
+  }
+  // player takes the more south-westerly of the pair (home feels like home)
+  if (P_HOME.x + (WORLD_TH - P_HOME.y) > R_HOME.x + (WORLD_TH - R_HOME.y)) {
+    [P_HOME, R_HOME] = [R_HOME, P_HOME];
+  }
   // village
   clearPatch(P_HOME.x, P_HOME.y, 4);
   for (let y = 0; y < 4; y++) for (let x = 0; x < 6; x++) set(P_HOME.x - 10 + x, P_HOME.y - 8 + y, Tl.HUT);
   for (let y = 0; y < 4; y++) for (let x = 0; x < 6; x++) set(P_HOME.x + 6 + x, P_HOME.y - 8 + y, Tl.HUT);
   set(P_HOME.x - 2, P_HOME.y, Tl.WELL);
-  clearPatch(17, 3 * SCR_TH + 12, 1);   // wand station
+  clearPatch(P_HOME.x + 3, P_HOME.y, 1);   // wand station sits 3 tiles east
   // keep
   clearPatch(R_HOME.x, R_HOME.y, 5);
   for (let x = -7; x <= 7; x++) {
@@ -120,7 +144,9 @@ export function ruleGenTiles(seed: number): Uint8Array {
       if (edge && !gate) set(R_HOME.x + x, R_HOME.y + y, Tl.WALL);
     }
   }
-  clearPatch(5 * SCR_TW + 13, 3 * SCR_TH + 14, 1);   // wand station
+  clearPatch(R_HOME.x - 3, R_HOME.y, 1);   // wand station sits 3 tiles west
+  set(P_HOME.x, P_HOME.y, Tl.PBASE);
+  set(R_HOME.x, R_HOME.y, Tl.RBASE);
 
   // --- Rule 5: the stone circle repels both bases
   let best = { x: WORLD_TW >> 1, y: 12, score: -1 };
@@ -144,7 +170,8 @@ export function ruleGenTiles(seed: number): Uint8Array {
   for (let tries = 0; tries < 4000 && shrines.length < 20; tries++) {
     const x = 3 + Math.floor(rng() * (WORLD_TW - 6));
     const y = 3 + Math.floor(rng() * (WORLD_TH - 6));
-    if (SOLID.has(get(x, y)) || get(x, y) === Tl.ALTAR || get(x, y) === Tl.SHRINE) continue;
+    const t0 = get(x, y);
+    if (SOLID.has(t0) || t0 === Tl.ALTAR || t0 === Tl.SHRINE || t0 === Tl.PBASE || t0 === Tl.RBASE) continue;
     if (Math.hypot(x - best.x, y - best.y) < 8) continue;
     if (Math.hypot(x - P_HOME.x, y - P_HOME.y) < 8 || Math.hypot(x - R_HOME.x, y - R_HOME.y) < 8) continue;
     if (shrines.some(s => Math.hypot(s.x - x, s.y - y) < 17)) continue;
