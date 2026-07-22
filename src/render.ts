@@ -819,7 +819,7 @@ function drawEndOptions(
     const shown = (g.entryName + (Math.floor(time * 3) % 2 === 0 && g.entryName.length < 3 ? '_' : ''))
       .padEnd(3, ' ');
     drawText(c, shown.split('').join(' '), Math.floor((CANVAS_W - textWidth('A A A', 2)) / 2), y + 16, acc, 2);
-    drawText(c, 'A-Z THEN ENTER', Math.floor((CANVAS_W - textWidth('A-Z THEN ENTER')) / 2), y + 32, fg);
+    drawText(c, 'A-Z THEN ENTER - ESC SKIPS', Math.floor((CANVAS_W - textWidth('A-Z THEN ENTER - ESC SKIPS')) / 2), y + 32, fg);
     return;
   }
   if (g.mode === 'win' && g.difficulty === 'easy') {
@@ -831,8 +831,14 @@ function drawEndOptions(
     }
     drawText(c, 'SPACE - REST ON YOUR LAURELS',
       Math.floor((CANVAS_W - textWidth('SPACE - REST ON YOUR LAURELS')) / 2), y + 26, fg);
-  } else if (Math.floor(time * 2) % 2 === 0) {
-    drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), y + 8, acc);
+    drawText(c, 'ESC - TITLE SCREEN',
+      Math.floor((CANVAS_W - textWidth('ESC - TITLE SCREEN')) / 2), y + 38, fg);
+  } else {
+    if (Math.floor(time * 2) % 2 === 0) {
+      drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), y + 8, acc);
+    }
+    drawText(c, 'ESC - TITLE SCREEN',
+      Math.floor((CANVAS_W - textWidth('ESC - TITLE SCREEN')) / 2), y + 20, fg);
   }
 }
 

@@ -1,5 +1,8 @@
 # UPGRADE
 
+**Play it: https://jonminton.github.io/upgrade-game/** (map editor:
+[/editor.html](https://jonminton.github.io/upgrade-game/editor.html))
+
 A retro flick-screen exploration game where the upgrades you find don't improve your
 character — they improve **the game itself**. Race an AI rival from ZX Spectrum
 attribute-clash monochrome-adjacent 1982 up to 32-colour Amiga 1995. Get derezzed and

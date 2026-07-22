@@ -17,6 +17,7 @@ let enterPressed = false;
 let hardPressed = false;
 let spacePressed = false;
 let chaosPressed = false;
+let escPressed = false;
 let seedOpenPressed = false;
 let seedStart: number | null = null;
 let difficulty: 'easy' | 'hard' = 'easy';
@@ -39,6 +40,8 @@ window.addEventListener('keydown', e => {
       g.entryName += e.key.toUpperCase();
     } else if (e.key === 'Backspace') {
       g.entryName = g.entryName.slice(0, -1);
+    } else if (e.key === 'Escape') {
+      g.entryActive = false;   // decline the hall
     } else if (e.key === 'Enter' && g.entryName.length > 0) {
       addScore({
         name: g.entryName.padEnd(3, '.'),
@@ -65,6 +68,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'Enter') { enterPressed = true; initAudio(); e.preventDefault(); return; }
+  if (e.key === 'Escape') escPressed = true;
   if (e.key === 'h' || e.key === 'H') hardPressed = true;
   if (e.key === 'c' || e.key === 'C') chaosPressed = true;
   if ((e.key === 's' || e.key === 'S') && g.mode === 'title') seedOpenPressed = true;
@@ -157,6 +161,16 @@ function frame(now: number): void {
     spacePressed = false;
     if (g.mode === 'win' && g.difficulty === 'easy') {
       // Rest on your laurels: back to the title (and back to the default map).
+      difficulty = 'easy';
+      chaosSeed = null;
+      g = newGame(difficulty);
+      g.mode = 'title';
+    }
+  }
+  // ESC from any end screen: back to the title (default map, easy).
+  if (escPressed) {
+    escPressed = false;
+    if ((g.mode === 'win' || g.mode === 'lose') && !g.entryActive) {
       difficulty = 'easy';
       chaosSeed = null;
       g = newGame(difficulty);
