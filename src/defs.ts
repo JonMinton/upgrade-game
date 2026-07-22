@@ -151,8 +151,11 @@ export interface RivalAI {
   interceptT: number; coolUntil: number; pauseUntil: number;
 }
 
+export type Difficulty = 'easy' | 'hard';
+
 export interface Game {
   mode: 'loading' | 'title' | 'play' | 'win' | 'lose';
+  difficulty: Difficulty;
   loadT: number;
   time: number; world: World;
   player: Ent; rival: Ent;

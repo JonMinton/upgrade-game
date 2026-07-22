@@ -726,6 +726,11 @@ function renderTitle(c: CanvasRenderingContext2D, time: number): void {
   if (Math.floor(time * 2) % 2 === 0) {
     drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER', 2)) / 2), 118, SPECTRUM[14], 2);
   }
+  let hardUnlocked = false;
+  try { hardUnlocked = localStorage.getItem('upgrade-hard-unlocked') === '1'; } catch { /* private mode */ }
+  if (hardUnlocked) {
+    drawText(c, 'H FOR HARD MODE', Math.floor((CANVAS_W - textWidth('H FOR HARD MODE')) / 2), 136, SPECTRUM[10]);
+  }
   const step = Math.floor(time) % CREDIT_YEARS.length;
   const credit = `JON FABLETON (C) ${CREDIT_YEARS[step]}`;
   const [ink, paper] = CREDIT_ATTRS[step];
@@ -734,6 +739,25 @@ function renderTitle(c: CanvasRenderingContext2D, time: number): void {
   c.fillStyle = SPECTRUM[paper];
   c.fillRect(cx - 4, 152, cw + 8, 11);
   drawText(c, credit, cx, 155, SPECTRUM[ink]);
+}
+
+// End-screen prompts. A win in easy mode offers the loop: face the true
+// Kernagh, or rest on your laurels.
+function drawEndOptions(
+  c: CanvasRenderingContext2D, g: Game, time: number, acc: string, fg: string, y: number,
+): void {
+  if (g.mode === 'win' && g.difficulty === 'easy') {
+    drawText(c, 'BUT THIS WAS THE EASY SIGNAL...',
+      Math.floor((CANVAS_W - textWidth('BUT THIS WAS THE EASY SIGNAL...')) / 2), y, fg);
+    if (Math.floor(time * 2) % 2 === 0) {
+      drawText(c, 'ENTER - FACE THE TRUE KERNAGH',
+        Math.floor((CANVAS_W - textWidth('ENTER - FACE THE TRUE KERNAGH')) / 2), y + 14, acc);
+    }
+    drawText(c, 'SPACE - REST ON YOUR LAURELS',
+      Math.floor((CANVAS_W - textWidth('SPACE - REST ON YOUR LAURELS')) / 2), y + 26, fg);
+  } else if (Math.floor(time * 2) % 2 === 0) {
+    drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), y + 8, acc);
+  }
 }
 
 function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: number): void {
@@ -761,9 +785,7 @@ function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: num
     const mins = Math.floor(g.endTime / 60), secs = Math.floor(g.endTime % 60);
     drawText(c, `TIME ${mins}:${secs < 10 ? '0' : ''}${secs}`,
       Math.floor((CANVAS_W - textWidth('TIME 0:00')) / 2), 100, fg);
-    if (Math.floor(time * 2) % 2 === 0) {
-      drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), 130, acc);
-    }
+    drawEndOptions(c, g, time, acc, fg, 122);
     return;
   }
   if (win) {
@@ -790,19 +812,17 @@ function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: num
       if (hash(i, 4) > 0.5) c.fillRect(Math.floor(hash(i, 1) * 62) * 4, Math.floor(hash(i, 2) * 46) * 4, 4, 4);
     }
     const big = g.loseWhy === 'derez' ? 'SIGNAL LOST' : 'KERNAGH ASCENDS';
+    // The race loss reports where YOU actually got to, not a fixed 1979 line.
     const sub = g.loseWhy === 'derez'
       ? 'DEREZZED AT THE FLOOR OF HISTORY'
-      : 'YOU ARE LEFT IN THE MONOCHROME OF 1979';
+      : `YOU ARE LEFT AT T${g.winTier} ${TIERS[g.winTier].name}`;
     drawText(c, big, Math.floor((CANVAS_W - textWidth(big, 2)) / 2), 40, '#ffffff', 2);
     drawText(c, sub, Math.floor((CANVAS_W - textWidth(sub)) / 2), 70, '#ffffff');
   }
   const mins = Math.floor(g.endTime / 60), secs = Math.floor(g.endTime % 60);
   const t = `TIME ${mins}:${secs < 10 ? '0' : ''}${secs}`;
   drawText(c, t, Math.floor((CANVAS_W - textWidth(t)) / 2), 100, win ? THEME[5].hudFg : '#ffffff');
-  if (Math.floor(time * 2) % 2 === 0) {
-    drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), 130,
-      win ? THEME[5].hudAccent : '#ffffff');
-  }
+  drawEndOptions(c, g, time, win ? THEME[5].hudAccent : '#ffffff', win ? THEME[5].hudFg : '#ffffff', 122);
 }
 
 // ---------- main entry ----------

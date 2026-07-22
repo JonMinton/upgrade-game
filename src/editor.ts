@@ -60,7 +60,7 @@ function offEnt(): Game['player'] {
   };
 }
 const fake: Game = {
-  mode: 'play', loadT: 0, time: 0, world,
+  mode: 'play', difficulty: 'hard', loadT: 0, time: 0, world,
   player: offEnt(), rival: { ...offEnt(), rival: true },
   bolts: [], shards: [], fx: [], berryCd: [],
   respawn: 99, msg: '', msgUntil: 0, ripple: -1, rippleFrom: 1,

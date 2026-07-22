@@ -14,7 +14,7 @@ const BOLT_SPEED = 150;
 const BOLT_LIFE = 0.9;
 const RESPAWN_EVERY = 22;
 const REGEN_EVERY = 12;
-const MAX_GROUND_SHARDS = 9;
+const MAX_GROUND_SHARDS = 10;
 
 function makeEnt(x: number, y: number, rival: boolean): Ent {
   return {
@@ -25,7 +25,7 @@ function makeEnt(x: number, y: number, rival: boolean): Ent {
   };
 }
 
-export function newGame(): Game {
+export function newGame(difficulty: 'easy' | 'hard' = 'easy'): Game {
   // The tile editor can stage an alternative map via localStorage.
   let world: World;
   try {
@@ -35,7 +35,7 @@ export function newGame(): Game {
     world = genWorld();
   }
   const g: Game = {
-    mode: 'loading', loadT: 0, time: 0, world,
+    mode: 'loading', difficulty, loadT: 0, time: 0, world,
     player: makeEnt(world.pHomeX, world.pHomeY, false),
     rival: makeEnt(world.rHomeX, world.rHomeY, true),
     bolts: [], shards: [], fx: [],
@@ -152,7 +152,7 @@ function pickups(g: Game, e: Ent): void {
       g.shards.splice(i, 1);
       e.shards++;
       relSfx(g, 'pickup', e.tier, s.x, s.y);
-      if (e.rival) g.ai.pauseUntil = g.time + 5;  // he potters a while, Leanoric-style
+      if (e.rival) g.ai.pauseUntil = g.time + (g.difficulty === 'easy' ? 9 : 5);  // he potters a while
       if (!e.rival) {
         if (e.shards >= SHARDS_PER_UPGRADE && !g.hinted3) {
           g.hinted3 = true;
@@ -244,18 +244,25 @@ export function update(g: Game, inp: Input, dt: number): void {
   }
 
   // --- Wand station: walk onto your village pedestal to swap fire <-> ice.
+  // Latch on entering 10px, release only past 16px — the release radius must
+  // EXCEED the trigger radius or walking in arms the latch before the trigger.
   const stD = Math.hypot(P_STATION.x - p.x, P_STATION.y - p.y);
   if (stD < 10 && !p.onStation) {
+    p.onStation = true;
     p.wand = p.wand === 'fire' ? 'ice' : 'fire';
     sfx('wand', p.tier);
     msg(g, p.wand === 'ice'
       ? 'ICEWAND - FREEZES BUT DOES NOT HARM'
       : 'FIREWAND - HARMS WITH A BRIEF STUN', 3);
+  } else if (stD > 16) {
+    p.onStation = false;
   }
-  p.onStation = stD < 14;
 
   // --- Rival
-  updateRival(g, dt, (bx, by) => fire(g, r, bx, by));
+  updateRival(g, dt, (bx, by) => {
+    fire(g, r, bx, by);
+    if (g.difficulty === 'easy') r.cool = 1.8;   // slower trigger finger
+  });
   if (r.stepAcc > 11) { r.stepAcc = 0; relSfx(g, 'step', r.tier, r.x, r.y, 0.9); }
 
   // --- Timers

@@ -186,3 +186,21 @@ increasingly rich stereo samples as he pulls ahead.
   download JSON, and "apply to game" via localStorage (the game loads the
   override on new game; "clear override" restores the built-in map).
 - Pacing after all of the above: idle-player loss at ~6.2 min.
+
+### Playtest round 4 (2026-07-22)
+
+- **Wand toggle fixed:** the station's latch hysteresis was inverted — walking
+  in crossed the 10–14px "on-station" band before the 10px trigger, arming the
+  latch and suppressing the swap forever (teleport tests jumped the band, which
+  is why they falsely passed). Trigger at 10px, release at 16px. Station tiles
+  are also now kept clear of scenery at generation.
+- **Race-loss screen** reports the tier the player actually reached.
+- **20 shrines** (up from 14).
+- **Difficulty loop:** games start in EASY mode — Kernagh is degraded at the
+  decision level only (18-tile perception, 2.2x slower repathing, 9s pickup
+  dawdle, 45% held shots + 1.8s fire cooldown, intercepts only near-altar
+  rituals and the endgame; movement speed and rules stay identical). Winning
+  easy shows the victory plus "BUT THIS WAS THE EASY SIGNAL..." — ENTER
+  continues into HARD mode (the current full AI), SPACE rests on your laurels.
+  Winning easy permanently unlocks "H FOR HARD MODE" on the title screen.
+  Idle-player loss: ~7.9 min easy, ~6 min hard.

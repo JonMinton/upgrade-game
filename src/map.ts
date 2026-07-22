@@ -261,11 +261,12 @@ export function genWorld(): World {
   for (let tx = 0; tx < WORLD_TW; tx++) { set(tx, 0, Tl.TREE); set(tx, WORLD_TH - 1, Tl.TREE); }
   for (let ty = 0; ty < WORLD_TH; ty++) { set(0, ty, Tl.TREE); set(WORLD_TW - 1, ty, Tl.TREE); }
 
-  // Shrines: (screen sx, sy, local lx, ly) — 14 of them.
+  // Shrines: (screen sx, sy, local lx, ly) — 20 of them.
   const shrineDefs: [number, number, number, number][] = [
     [0, 3, 25, 15], [1, 1, 6, 5], [2, 2, 24, 16], [3, 1, 8, 15], [4, 2, 20, 4],
     [5, 0, 8, 14], [4, 1, 22, 6], [5, 3, 18, 13], [0, 0, 10, 6], [2, 3, 10, 16],
     [1, 0, 20, 6], [2, 1, 24, 5], [5, 2, 10, 8], [3, 3, 24, 7],
+    [0, 1, 16, 14], [1, 2, 8, 6], [4, 3, 12, 14], [2, 0, 10, 4], [4, 0, 10, 16], [5, 1, 20, 16],
   ];
   for (const [sx, sy, lx, ly] of shrineDefs) {
     const tx = sx * SCR_TW + lx, ty = sy * SCR_TH + ly;
@@ -277,8 +278,11 @@ export function genWorld(): World {
     }
   }
 
-  // Clear a patch around homes.
-  for (const [htx, hty] of [[P_HOME_TX, P_HOME_TY], [R_HOME_TX, R_HOME_TY]]) {
+  // Clear a patch around homes and the wand stations (a stray tree on a
+  // station tile makes the pedestal unreachable and invisible).
+  for (const [htx, hty] of [
+    [P_HOME_TX, P_HOME_TY], [R_HOME_TX, R_HOME_TY], [17, 3 * SCR_TH + 12], [5 * SCR_TW + 13, 3 * SCR_TH + 14],
+  ]) {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (SOLID.has(get(htx + dx, hty + dy))) set(htx + dx, hty + dy, Tl.GRASS);

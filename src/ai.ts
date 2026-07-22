@@ -108,10 +108,12 @@ function berryTarget(g: Game): Vec | null {
 }
 
 // Chase only when it's genuinely threatening — not a standing stalk order.
+// In easy mode he only contests the endgame and nearby rituals.
 function interceptWorthwhile(g: Game, distP: number): boolean {
   const p = g.player, r = g.rival, ai = g.ai;
   if (inSafe(p.x, p.y)) return false;
-  if (p.tier >= WIN_TIER) return true;                  // endgame: always contest the hold
+  if (p.tier >= WIN_TIER) return true;                  // endgame: always contest
+  if (g.difficulty === 'easy') return p.channel > 0 && distP < 200;
   if (p.channel > 0 && distP < 400) return true;        // break the ritual if reachable
   return p.shards >= 2 && r.shards < 2 && distP < 220 && g.time > ai.coolUntil;
 }
@@ -157,9 +159,10 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
   } else {
     ai.state = 'forage';
     ai.interceptT = 0;
-    // Imperfect knowledge: he perceives shards within ~32 tiles of walking;
-    // beyond that he patrols the shrines he knows.
-    const found = nearestPointByPath(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), 32, g.shards);
+    // Imperfect knowledge: he perceives shards within a walking range (shorter
+    // when degraded); beyond that he patrols the shrines he knows.
+    const sight = g.difficulty === 'easy' ? 18 : 32;
+    const found = nearestPointByPath(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), sight, g.shards);
     if (found) {
       target = { x: found.x, y: found.y };
       key = `s${found.x | 0},${found.y | 0}`;
@@ -180,7 +183,7 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
     ai.path = bfs(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), Math.floor(target.x / TILE), Math.floor(target.y / TILE));
     ai.pathI = 0;
     ai.targetKey = key;
-    ai.repath = key === 'player' ? 0.4 : 0.8;
+    ai.repath = (key === 'player' ? 0.4 : 0.8) * (g.difficulty === 'easy' ? 2.2 : 1);
     ai.stuck = 0;
   }
 
@@ -207,9 +210,14 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
   }
 
   // Opportunistic fire — cardinal directions only, same rules as the player.
+  // Degraded Kernagh hesitates and often lets the shot go.
   if (r.cool <= 0 && distP < 150 && !inSafe(r.x, r.y) && !inSafe(p.x, p.y) && los(g, r.x, r.y, p.x, p.y)) {
-    const dx = p.x - r.x, dy = p.y - r.y;
-    if (Math.abs(dx) > 2.5 * Math.abs(dy)) fire(Math.sign(dx), 0);
-    else if (Math.abs(dy) > 2.5 * Math.abs(dx)) fire(0, Math.sign(dy));
+    if (g.difficulty === 'easy' && Math.random() < 0.45) {
+      r.cool = 0.6;
+    } else {
+      const dx = p.x - r.x, dy = p.y - r.y;
+      if (Math.abs(dx) > 2.5 * Math.abs(dy)) fire(Math.sign(dx), 0);
+      else if (Math.abs(dy) > 2.5 * Math.abs(dx)) fire(0, Math.sign(dy));
+    }
   }
 }

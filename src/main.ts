@@ -13,6 +13,9 @@ ctx.imageSmoothingEnabled = false;
 
 const input: Input = { up: false, down: false, left: false, right: false, fire: false };
 let enterPressed = false;
+let hardPressed = false;
+let spacePressed = false;
+let difficulty: 'easy' | 'hard' = 'easy';
 
 const KEYMAP: Record<string, keyof Input> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -22,6 +25,8 @@ const KEYMAP: Record<string, keyof Input> = {
 
 window.addEventListener('keydown', e => {
   if (e.key === 'Enter') { enterPressed = true; initAudio(); e.preventDefault(); return; }
+  if (e.key === 'h' || e.key === 'H') hardPressed = true;
+  if (e.key === ' ') spacePressed = true;
   const k = KEYMAP[e.key];
   if (k) { input[k] = true; initAudio(); e.preventDefault(); }
 });
@@ -51,20 +56,51 @@ function frame(now: number): void {
     if (g.loadT >= 3) g.mode = 'title';
   }
 
+  // Winning easy mode unlocks the hard-mode shortcut permanently.
+  if (g.mode === 'win' && g.difficulty === 'easy') {
+    try { localStorage.setItem('upgrade-hard-unlocked', '1'); } catch { /* private mode */ }
+  }
+
+  const startPlay = (): void => {
+    g.mode = 'play';
+    setTitleMode(false);
+    setMusicTier(g.player.tier);
+    msg(g, g.difficulty === 'hard'
+      ? 'HARD MODE - THE TRUE KERNAGH AWAKENS'
+      : 'FIND THE SHARDS. KERNAGH SEEKS THEM TOO', 4);
+  };
+
+  if (hardPressed) {
+    hardPressed = false;
+    if (g.mode === 'title') {
+      difficulty = 'hard';
+      g.difficulty = 'hard';
+      startPlay();
+    }
+  }
+  if (spacePressed) {
+    spacePressed = false;
+    if (g.mode === 'win' && g.difficulty === 'easy') {
+      // Rest on your laurels: back to the title.
+      difficulty = 'easy';
+      g = newGame(difficulty);
+      g.mode = 'title';
+    }
+  }
   if (enterPressed) {
     enterPressed = false;
     if (g.mode === 'loading') {
       g.mode = 'title';
     } else if (g.mode === 'title') {
-      g.mode = 'play';
-      setTitleMode(false);
-      setMusicTier(g.player.tier);
-      msg(g, 'FIND THE SHARDS. KERNAGH SEEKS THEM TOO', 4);
+      startPlay();
+    } else if (g.mode === 'win' && g.difficulty === 'easy') {
+      // The loop: victory in easy mode leads to the true Kernagh.
+      difficulty = 'hard';
+      g = newGame(difficulty);
+      startPlay();
     } else if (g.mode === 'win' || g.mode === 'lose') {
-      g = newGame();
-      g.mode = 'play';
-      setTitleMode(false);
-      setMusicTier(g.player.tier);
+      g = newGame(difficulty);
+      startPlay();
     }
   }
 
