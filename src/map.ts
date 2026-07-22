@@ -83,14 +83,37 @@ export function worldFromTiles(tiles: Uint8Array): World {
   const pHomeY = pb ? pb.y * TILE + 4 : P_HOME_TY * TILE;
   const rHomeX = rb ? rb.x * TILE + 4 : R_HOME_TX * TILE;
   const rHomeY = rb ? rb.y * TILE + 4 : R_HOME_TY * TILE;
+
+  // Wand station: 3 tiles from home, choosing the candidate that sits deepest
+  // inside the home screen — a pedestal near a screen edge gets walked over by
+  // accident on the way through.
+  const placeStation = (hx: number, hy: number): Vec => {
+    const htx = Math.floor(hx / TILE), hty = Math.floor(hy / TILE);
+    const scrX = Math.floor(htx / SCR_TW), scrY = Math.floor(hty / SCR_TH);
+    let best: { tx: number; ty: number; margin: number } | null = null;
+    for (const [dx, dy] of [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, 2], [2, -2], [-2, -2]] as const) {
+      const tx = htx + dx, ty = hty + dy;
+      if (tx < 1 || ty < 1 || tx >= WORLD_TW - 1 || ty >= WORLD_TH - 1) continue;
+      if (Math.floor(tx / SCR_TW) !== scrX || Math.floor(ty / SCR_TH) !== scrY) continue;
+      if (SOLID.has(tiles[ty * WORLD_TW + tx])) continue;
+      const lx = tx % SCR_TW, ly = ty % SCR_TH;
+      const margin = Math.min(lx, SCR_TW - 1 - lx, ly, SCR_TH - 1 - ly);
+      if (!best || margin > best.margin) best = { tx, ty, margin };
+    }
+    if (!best) best = { tx: htx + 3, ty: hty, margin: 0 };
+    return { x: best.tx * TILE + 4, y: best.ty * TILE + 4 };
+  };
+  const pSt = placeStation(pHomeX, pHomeY);
+  const rSt = placeStation(rHomeX, rHomeY);
+
   return {
     tiles,
     shrines: scanTiles(tiles, Tl.SHRINE),
     berrySpots: scanTiles(tiles, Tl.BERRY),
     altarX: ax, altarY: ay,
     pHomeX, pHomeY, rHomeX, rHomeY,
-    pStationX: pHomeX + 3 * TILE, pStationY: pHomeY,
-    rStationX: rHomeX - 3 * TILE, rStationY: rHomeY,
+    pStationX: pSt.x, pStationY: pSt.y,
+    rStationX: rSt.x, rStationY: rSt.y,
     pSafe: { x: Math.floor(pHomeX / (SCR_TW * TILE)), y: Math.floor(pHomeY / (SCR_TH * TILE)) },
     rSafe: { x: Math.floor(rHomeX / (SCR_TW * TILE)), y: Math.floor(rHomeY / (SCR_TH * TILE)) },
   };

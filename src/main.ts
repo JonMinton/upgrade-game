@@ -168,6 +168,7 @@ function frame(now: number): void {
     }
   }
   // ESC from any end screen: back to the title (default map, easy).
+  // ESC in play arms a confirm; a second ESC within the window quits.
   if (escPressed) {
     escPressed = false;
     if ((g.mode === 'win' || g.mode === 'lose') && !g.entryActive) {
@@ -175,6 +176,15 @@ function frame(now: number): void {
       chaosSeed = null;
       g = newGame(difficulty);
       g.mode = 'title';
+    } else if (g.mode === 'play') {
+      if (g.time < g.escArmUntil) {
+        difficulty = 'easy';
+        chaosSeed = null;
+        g = newGame(difficulty);
+        g.mode = 'title';
+      } else {
+        g.escArmUntil = g.time + 2.5;
+      }
     }
   }
   if (enterPressed) {

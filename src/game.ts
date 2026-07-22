@@ -62,7 +62,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number 
     camX: 0, camY: SCR_H * 3,
     hinted3: false, endTime: 0, loseWhy: 'race', winWhy: 'transcend', winTier: WIN_TIER,
     maxTier: START_TIER, kills: 0, score: 0, scored: false, entryActive: false, entryName: '',
-    mapName, chaosSeed, seedEntry: null,
+    mapName, chaosSeed, seedEntry: null, escArmUntil: 0,
   };
   // A modest starting scatter (4 shrines, spread across the map); the rest of
   // the economy comes from respawns, so neither racer can sprint the ladder.

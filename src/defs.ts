@@ -187,6 +187,7 @@ export interface Game {
   mapName: string;   // which map this game is played on (tags score entries)
   chaosSeed: number | null;   // set when playing a procedurally-rolled map
   seedEntry: string | null;   // title-screen seed input in progress (null = closed)
+  escArmUntil: number;        // in-play quit confirm: ESC again before this g.time exits
 }
 
 export interface Input { up: boolean; down: boolean; left: boolean; right: boolean; fire: boolean }

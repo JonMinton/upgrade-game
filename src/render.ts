@@ -661,6 +661,16 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
     c.fillRect(x - 3, 2, wpx + 6, 9);
     drawText(c, g.msg, x, 4, envTier === 0 ? '#ffffff' : col.acc);
   }
+
+  // Quit confirm: armed by ESC during play.
+  if (g.time < g.escArmUntil) {
+    const qt = 'ESC AGAIN - TITLE SCREEN';
+    const wpx = textWidth(qt);
+    const x = Math.floor((CANVAS_W - wpx) / 2);
+    c.fillStyle = 'rgba(0,0,0,0.85)';
+    c.fillRect(x - 4, 13, wpx + 8, 10);
+    drawText(c, qt, x, 15, envTier === 0 ? '#ffffff' : col.hp);
+  }
 }
 
 // ---------- title & end screens ----------
