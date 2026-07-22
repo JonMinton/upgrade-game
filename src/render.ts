@@ -16,6 +16,7 @@ import {
   BERRY_DOTS, WAND_FIRE, WAND_ICE, SHARD_TAPE,
 } from './sprites';
 import { drawText, textWidth } from './font';
+import { loadScores } from './hiscores';
 
 // Pulsing diamond burst for T0 shard signalling (16x16).
 const BURST = (() => {
@@ -707,6 +708,28 @@ function renderGuide(c: CanvasRenderingContext2D, time: number): void {
   }
 }
 
+// Hall of Signals: the persistent hi-score table, third screen in the cycle.
+function renderScoresScreen(c: CanvasRenderingContext2D, time: number): void {
+  c.fillStyle = '#000000';
+  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  borderStripes(c, time);
+  drawText(c, 'HALL OF SIGNALS', Math.floor((CANVAS_W - textWidth('HALL OF SIGNALS', 2)) / 2), 16, SPECTRUM[15], 2);
+  const scores = loadScores();
+  if (!scores.length) {
+    drawText(c, 'NO SIGNALS RECORDED YET',
+      Math.floor((CANVAS_W - textWidth('NO SIGNALS RECORDED YET')) / 2), 80, SPECTRUM[7]);
+  }
+  scores.forEach((s, i) => {
+    const col = i === 0 ? SPECTRUM[14] : i < 3 ? SPECTRUM[13] : SPECTRUM[15];
+    const rank = `${i + 1}`.padStart(2, ' ');
+    const score = `${s.score}`.padStart(5, ' ');
+    drawText(c, `${rank}  ${s.name}  ${score}  ${s.mode === 'H' ? 'HARD' : 'EASY'}`, 58, 40 + i * 13, col);
+  });
+  if (Math.floor(time * 2) % 2 === 0) {
+    drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER')) / 2), 168, SPECTRUM[14]);
+  }
+}
+
 // The credit year walks the tier ladder at 1 fps with cycling attributes.
 const CREDIT_YEARS = ['1979', '1982', '1986', '1987', '1990', '1995'];
 const CREDIT_ATTRS: [number, number][] = [[7, 0], [15, 1], [14, 2], [12, 0], [13, 3], [11, 0]];
@@ -741,11 +764,22 @@ function renderTitle(c: CanvasRenderingContext2D, time: number): void {
   drawText(c, credit, cx, 155, SPECTRUM[ink]);
 }
 
-// End-screen prompts. A win in easy mode offers the loop: face the true
-// Kernagh, or rest on your laurels.
+// End-screen prompts: score, hi-score initials entry, and the easy-mode loop
+// offer (face the true Kernagh, or rest on your laurels).
 function drawEndOptions(
   c: CanvasRenderingContext2D, g: Game, time: number, acc: string, fg: string, y: number,
 ): void {
+  const sc = `SCORE ${g.score}`;
+  drawText(c, sc, Math.floor((CANVAS_W - textWidth(sc)) / 2), y - 12, acc);
+  if (g.entryActive) {
+    drawText(c, 'A NEW SIGNAL FOR THE HALL - YOUR NAME:',
+      Math.floor((CANVAS_W - textWidth('A NEW SIGNAL FOR THE HALL - YOUR NAME:')) / 2), y + 4, fg);
+    const shown = (g.entryName + (Math.floor(time * 3) % 2 === 0 && g.entryName.length < 3 ? '_' : ''))
+      .padEnd(3, ' ');
+    drawText(c, shown.split('').join(' '), Math.floor((CANVAS_W - textWidth('A A A', 2)) / 2), y + 16, acc, 2);
+    drawText(c, 'A-Z THEN ENTER', Math.floor((CANVAS_W - textWidth('A-Z THEN ENTER')) / 2), y + 32, fg);
+    return;
+  }
   if (g.mode === 'win' && g.difficulty === 'easy') {
     drawText(c, 'BUT THIS WAS THE EASY SIGNAL...',
       Math.floor((CANVAS_W - textWidth('BUT THIS WAS THE EASY SIGNAL...')) / 2), y, fg);
@@ -835,7 +869,9 @@ export function renderPlay(c: CanvasRenderingContext2D, g: Game, envTier: number
 export function render(c: CanvasRenderingContext2D, g: Game, time: number): void {
   if (g.mode === 'loading') { renderLoading(c, g, time); return; }
   if (g.mode === 'title') {
-    if (Math.floor(time / 6) % 2 === 1) renderGuide(c, time);
+    const phase = Math.floor(time / 6) % 3;
+    if (phase === 1) renderGuide(c, time);
+    else if (phase === 2) renderScoresScreen(c, time);
     else renderTitle(c, time);
     return;
   }

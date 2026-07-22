@@ -12,7 +12,7 @@ import { sfx, setMusicTier, SfxName } from './audio';
 const SPEED = 64;
 const BOLT_SPEED = 150;
 const BOLT_LIFE = 0.9;
-const RESPAWN_EVERY = 22;
+const RESPAWN_EVERY = 19;
 const REGEN_EVERY = 12;
 const MAX_GROUND_SHARDS = 10;
 
@@ -49,6 +49,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy'): Game {
     },
     camX: 0, camY: SCR_H * 3,
     hinted3: false, endTime: 0, loseWhy: 'race', winWhy: 'transcend', winTier: WIN_TIER,
+    maxTier: START_TIER, kills: 0, score: 0, scored: false, entryActive: false, entryName: '',
   };
   // A modest starting scatter (4 shrines, spread across the map); the rest of
   // the economy comes from respawns, so neither racer can sprint the ladder.
@@ -79,10 +80,22 @@ function setTier(g: Game, e: Ent, tier: number): void {
   const old = e.tier;
   e.tier = tier;
   if (!e.rival) {
+    g.maxTier = Math.max(g.maxTier, tier);
     g.ripple = g.time;
     g.rippleFrom = old;
     setMusicTier(tier);
   }
+}
+
+// Arcade scoring: progress + aggression + victory + speed, doubled in hard mode.
+export function finalScore(g: Game): number {
+  let s = g.maxTier * 150 + g.kills * 75;
+  if (g.mode === 'win') {
+    s += g.winWhy === 'transcend' ? 500 : 250;
+    s += Math.max(0, 600 - Math.floor(g.endTime));
+  }
+  if (g.difficulty === 'hard') s *= 2;
+  return s;
 }
 
 function fire(g: Game, e: Ent, dx: number, dy: number): void {
@@ -125,6 +138,7 @@ function dropShards(g: Game, e: Ent): void {
 
 function derez(g: Game, e: Ent): void {
   g.fx.push({ x: e.x, y: e.y, t0: g.time, kind: 0 });
+  if (e.rival) g.kills++;
   // Derezzed at the very floor of history: that entity is finished.
   if (e.tier === 0) {
     sfx('derez', e.rival ? g.player.tier : 0, 1);
@@ -135,13 +149,17 @@ function derez(g: Game, e: Ent): void {
     g.endTime = g.time;
     return;
   }
+  const dropped = e.shards;
   dropShards(g, e);
   e.shards = 0;
   setTier(g, e, Math.max(0, e.tier - 1));
   e.x = e.homeX; e.y = e.homeY;
   e.hp = 3; e.inv = 2; e.channel = 0; e.stun = 0;
   relSfx(g, 'derez', e.tier, g.player.x, g.player.y);
-  msg(g, e.rival ? 'KERNAGH DEREZZED! HE DROPS TO T' + e.tier : 'DEREZZED! YOU FALL TO T' + e.tier, 3);
+  const loot = dropped > 0 ? ' - DROPS ' + '◆'.repeat(dropped) : '';
+  msg(g, e.rival
+    ? 'KERNAGH DEREZZED TO T' + e.tier + loot
+    : 'DEREZZED! YOU FALL TO T' + e.tier + loot, 3);
 }
 
 function pickups(g: Game, e: Ent): void {

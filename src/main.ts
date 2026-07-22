@@ -1,9 +1,10 @@
 // UPGRADE — entry point: input, loop, mode transitions.
 
 import { Game, Input, CANVAS_W, CANVAS_H } from './defs';
-import { newGame, update, msg } from './game';
+import { newGame, update, msg, finalScore } from './game';
 import { render } from './render';
 import { initAudio, setTitleMode, setMusicTier } from './audio';
+import { qualifies, addScore } from './hiscores';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 canvas.width = CANVAS_W;
@@ -24,6 +25,23 @@ const KEYMAP: Record<string, keyof Input> = {
 };
 
 window.addEventListener('keydown', e => {
+  // Hi-score initials entry captures the keyboard entirely.
+  if (g.entryActive) {
+    if (/^[a-zA-Z0-9]$/.test(e.key) && g.entryName.length < 3) {
+      g.entryName += e.key.toUpperCase();
+    } else if (e.key === 'Backspace') {
+      g.entryName = g.entryName.slice(0, -1);
+    } else if (e.key === 'Enter' && g.entryName.length > 0) {
+      addScore({
+        name: g.entryName.padEnd(3, '.'),
+        score: g.score,
+        mode: g.difficulty === 'hard' ? 'H' : 'E',
+      });
+      g.entryActive = false;
+    }
+    e.preventDefault();
+    return;
+  }
   if (e.key === 'Enter') { enterPressed = true; initAudio(); e.preventDefault(); return; }
   if (e.key === 'h' || e.key === 'H') hardPressed = true;
   if (e.key === ' ') spacePressed = true;
@@ -59,6 +77,16 @@ function frame(now: number): void {
   // Winning easy mode unlocks the hard-mode shortcut permanently.
   if (g.mode === 'win' && g.difficulty === 'easy') {
     try { localStorage.setItem('upgrade-hard-unlocked', '1'); } catch { /* private mode */ }
+  }
+
+  // Finalise the score once per game and open initials entry if it ranks.
+  if ((g.mode === 'win' || g.mode === 'lose') && !g.scored) {
+    g.scored = true;
+    g.score = finalScore(g);
+    if (qualifies(g.score)) {
+      g.entryActive = true;
+      g.entryName = '';
+    }
   }
 
   const startPlay = (): void => {

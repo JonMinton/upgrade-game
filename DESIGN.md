@@ -204,3 +204,18 @@ increasingly rich stereo samples as he pulls ahead.
   continues into HARD mode (the current full AI), SPACE rests on your laurels.
   Winning easy permanently unlocks "H FOR HARD MODE" on the title screen.
   Idle-player loss: ~7.9 min easy, ~6 min hard.
+
+### Playtest round 5 (2026-07-22)
+
+- **Shard cap confirmed at 3** for both wizards (entry guard + mid-loop break
+  in `pickups()`); shard respawn quickened 22 s → 19 s instead.
+- **Death drops confirmed working** (they already were): a derezzed wizard's
+  carried shards scatter at the kill spot on walkable tiles; the derez message
+  now shows the loot ("KERNAGH DEREZZED TO T1 - DROPS ◆◆◆") to make the
+  firewand-vs-icewand incentive legible.
+- **Scoring + Hall of Signals:** score = 150 × highest tier + 75 × Kernagh
+  derezzes + win bonus (500 transcend / 250 elimination) + time bonus
+  (600 − seconds, wins only), all ×2 in hard mode. Top-8 table persists in
+  localStorage (per-browser; an online table would need a server). Qualifying
+  ends open a 3-character arcade initials entry on the end screen; the table
+  is the third screen in the title rotation (title → guide → hall).

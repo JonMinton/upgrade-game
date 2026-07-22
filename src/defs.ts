@@ -171,6 +171,10 @@ export interface Game {
   loseWhy: 'race' | 'derez';
   winWhy: 'transcend' | 'elimination';
   winTier: number;   // player tier at the moment of victory (styles the partial screen)
+  maxTier: number;   // highest tier the player reached this game
+  kills: number;     // times Kernagh was derezzed
+  score: number; scored: boolean;
+  entryActive: boolean; entryName: string;   // hi-score initials entry
 }
 
 export interface Input { up: boolean; down: boolean; left: boolean; right: boolean; fire: boolean }

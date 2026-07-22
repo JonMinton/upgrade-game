@@ -70,6 +70,7 @@ const fake: Game = {
   },
   camX: 0, camY: 0, hinted3: true, endTime: 0,
   loseWhy: 'race', winWhy: 'transcend', winTier: 5,
+  maxTier: 5, kills: 0, score: 0, scored: false, entryActive: false, entryName: '',
 };
 rebuild();
 
