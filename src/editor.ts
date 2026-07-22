@@ -71,6 +71,7 @@ const fake: Game = {
   camX: 0, camY: 0, hinted3: true, endTime: 0,
   loseWhy: 'race', winWhy: 'transcend', winTier: 5,
   maxTier: 5, kills: 0, score: 0, scored: false, entryActive: false, entryName: '',
+  mapName: 'EDITOR',
 };
 rebuild();
 
@@ -102,6 +103,14 @@ for (let t = 0; t <= 5; t++) {
   const b = button(`T${t}`, () => { selTier = t; fake.player.tier = t; markSel('tier', b); }, 'tier');
   if (t === selTier) b.classList.add('sel');
 }
+// Map name: tags hi-score entries so scores compare like with like.
+const nameInput = document.createElement('input');
+nameInput.value = (localStorage.getItem('upgrade-map-name') || 'CUSTOM').slice(0, 6);
+nameInput.maxLength = 6;
+nameInput.style.cssText = 'width:70px;background:#262636;color:#ddd;border:1px solid #444;font:12px monospace;padding:4px;text-transform:uppercase';
+nameInput.title = 'map name (max 6 chars, tags hi-scores)';
+bar.appendChild(nameInput);
+
 button('check connectivity', () => {
   say(poisReachable(world)
     ? 'OK: every shrine, berry, the altar and both homes are reachable'
@@ -109,10 +118,12 @@ button('check connectivity', () => {
 });
 button('apply to game', () => {
   localStorage.setItem(LS_KEY, JSON.stringify(Array.from(tiles)));
+  localStorage.setItem('upgrade-map-name', nameInput.value.toUpperCase().slice(0, 6) || 'CUSTOM');
   say('applied — reload the game tab (same browser) to play this map');
 });
 button('clear override', () => {
   localStorage.removeItem(LS_KEY);
+  localStorage.removeItem('upgrade-map-name');
   say('override cleared — the game will use the built-in map again');
 });
 button('reset to built-in', () => {
@@ -120,14 +131,45 @@ button('reset to built-in', () => {
   rebuild();
   say('reset to the generated map (not yet applied)');
 });
+button('blank map', () => {
+  tiles = new Uint8Array(WORLD_TW * WORLD_TH).fill(Tl.GRASS);
+  for (let tx = 0; tx < WORLD_TW; tx++) { tiles[tx] = Tl.TREE; tiles[(WORLD_TH - 1) * WORLD_TW + tx] = Tl.TREE; }
+  for (let ty = 0; ty < WORLD_TH; ty++) { tiles[ty * WORLD_TW] = Tl.TREE; tiles[ty * WORLD_TW + WORLD_TW - 1] = Tl.TREE; }
+  rebuild();
+  say('blank map: paint an ALTAR (2x2), SHRINEs and BERRYs, then check connectivity');
+});
 button('download json', () => {
-  const blob = new Blob([JSON.stringify(Array.from(tiles))], { type: 'application/json' });
+  const name = nameInput.value.toUpperCase().slice(0, 6) || 'CUSTOM';
+  const blob = new Blob([JSON.stringify({ name, tiles: Array.from(tiles) })], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'upgrade-map.json';
+  a.download = `upgrade-map-${name.toLowerCase()}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 });
+// Load a playtester-contributed map file ({name, tiles} or a bare tile array).
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.accept = '.json';
+fileInput.style.display = 'none';
+fileInput.addEventListener('change', async () => {
+  const f = fileInput.files?.[0];
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text()) as { name?: string; tiles?: number[] } | number[];
+    const arr = Array.isArray(data) ? data : data.tiles;
+    if (!arr || arr.length !== tiles.length) throw new Error('wrong size');
+    tiles = Uint8Array.from(arr);
+    if (!Array.isArray(data) && data.name) nameInput.value = String(data.name).slice(0, 6);
+    rebuild();
+    say(`loaded "${f.name}" (not yet applied)`);
+  } catch (err) {
+    say(`could not load: ${err instanceof Error ? err.message : 'bad file'}`);
+  }
+  fileInput.value = '';
+});
+document.body.appendChild(fileInput);
+button('load json', () => fileInput.click());
 
 // --- arena view (4px per tile, schematic colours)
 const TILE_COLOR: string[] = [];
@@ -154,7 +196,37 @@ function renderArena(): void {
   aCtx.lineWidth = 1;
 }
 
+// Arena mode: "select" clicks pick a screen; "paint" drags edit tiles at
+// arena scale — for coherent whole-world features like rivers and hedges.
+let arenaPaint = false;
+const arenaModeBtn = button('arena: select', () => {
+  arenaPaint = !arenaPaint;
+  arenaModeBtn.textContent = arenaPaint ? 'arena: paint' : 'arena: select';
+  say(arenaPaint
+    ? 'arena painting on — drag to paint, right-drag to erase, shift-click to select a screen'
+    : 'arena click selects a screen');
+});
+
+let arenaPainting = 0;
+function paintArenaAt(e: MouseEvent): void {
+  const r = arena.getBoundingClientRect();
+  const tx = Math.floor((e.clientX - r.left) / r.width * WORLD_TW);
+  const ty = Math.floor((e.clientY - r.top) / r.height * WORLD_TH);
+  if (tx < 0 || ty < 0 || tx >= WORLD_TW || ty >= WORLD_TH) return;
+  const t = arenaPainting === 2 ? Tl.GRASS : selTile;
+  if (tiles[ty * WORLD_TW + tx] !== t) {
+    tiles[ty * WORLD_TW + tx] = t;
+    rebuild();
+  }
+}
+
+arena.addEventListener('contextmenu', e => e.preventDefault());
 arena.addEventListener('mousedown', e => {
+  if (arenaPaint && !e.shiftKey) {
+    arenaPainting = e.button === 2 ? 2 : 1;
+    paintArenaAt(e);
+    return;
+  }
   const r = arena.getBoundingClientRect();
   sel = {
     x: Math.min(WORLD_SW - 1, Math.floor((e.clientX - r.left) / r.width * WORLD_SW)),
@@ -165,6 +237,8 @@ arena.addEventListener('mousedown', e => {
   dirtyArena = true;
   say(`editing screen (${sel.x},${sel.y})`);
 });
+arena.addEventListener('mousemove', e => { if (arenaPainting) paintArenaAt(e); });
+window.addEventListener('mouseup', () => { arenaPainting = 0; });
 
 // --- screen painting
 let painting = 0; // 0 none, 1 paint, 2 erase

@@ -28,9 +28,15 @@ function makeEnt(x: number, y: number, rival: boolean): Ent {
 export function newGame(difficulty: 'easy' | 'hard' = 'easy'): Game {
   // The tile editor can stage an alternative map via localStorage.
   let world: World;
+  let mapName = 'VALE';
   try {
     const o = localStorage.getItem('upgrade-map');
-    world = o ? worldFromTiles(Uint8Array.from(JSON.parse(o) as number[])) : genWorld();
+    if (o) {
+      world = worldFromTiles(Uint8Array.from(JSON.parse(o) as number[]));
+      mapName = (localStorage.getItem('upgrade-map-name') || 'CUSTOM').toUpperCase().slice(0, 6);
+    } else {
+      world = genWorld();
+    }
   } catch {
     world = genWorld();
   }
@@ -50,6 +56,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy'): Game {
     camX: 0, camY: SCR_H * 3,
     hinted3: false, endTime: 0, loseWhy: 'race', winWhy: 'transcend', winTier: WIN_TIER,
     maxTier: START_TIER, kills: 0, score: 0, scored: false, entryActive: false, entryName: '',
+    mapName,
   };
   // A modest starting scatter (4 shrines, spread across the map); the rest of
   // the economy comes from respawns, so neither racer can sprint the ladder.

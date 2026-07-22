@@ -16,7 +16,7 @@ import {
   BERRY_DOTS, WAND_FIRE, WAND_ICE, SHARD_TAPE,
 } from './sprites';
 import { drawText, textWidth } from './font';
-import { loadScores } from './hiscores';
+import { filteredScores, activeMapFilter } from './hiscores';
 
 // Pulsing diamond burst for T0 shard signalling (16x16).
 const BURST = (() => {
@@ -713,8 +713,11 @@ function renderScoresScreen(c: CanvasRenderingContext2D, time: number): void {
   c.fillStyle = '#000000';
   c.fillRect(0, 0, CANVAS_W, CANVAS_H);
   borderStripes(c, time);
-  drawText(c, 'HALL OF SIGNALS', Math.floor((CANVAS_W - textWidth('HALL OF SIGNALS', 2)) / 2), 16, SPECTRUM[15], 2);
-  const scores = loadScores();
+  drawText(c, 'HALL OF SIGNALS', Math.floor((CANVAS_W - textWidth('HALL OF SIGNALS', 2)) / 2), 14, SPECTRUM[15], 2);
+  const filter = activeMapFilter();
+  const fLabel = `MAP: ${filter ?? 'ALL'}`;
+  drawText(c, fLabel, Math.floor((CANVAS_W - textWidth(fLabel)) / 2), 30, SPECTRUM[13]);
+  const scores = filteredScores();
   if (!scores.length) {
     drawText(c, 'NO SIGNALS RECORDED YET',
       Math.floor((CANVAS_W - textWidth('NO SIGNALS RECORDED YET')) / 2), 80, SPECTRUM[7]);
@@ -723,8 +726,9 @@ function renderScoresScreen(c: CanvasRenderingContext2D, time: number): void {
     const col = i === 0 ? SPECTRUM[14] : i < 3 ? SPECTRUM[13] : SPECTRUM[15];
     const rank = `${i + 1}`.padStart(2, ' ');
     const score = `${s.score}`.padStart(5, ' ');
-    drawText(c, `${rank}  ${s.name}  ${score}  ${s.mode === 'H' ? 'HARD' : 'EASY'}`, 58, 40 + i * 13, col);
+    drawText(c, `${rank}  ${s.name}  ${score}  ${s.map.slice(0, 6)}`, 48, 44 + i * 13, col);
   });
+  drawText(c, 'M - FILTER BY MAP', Math.floor((CANVAS_W - textWidth('M - FILTER BY MAP')) / 2), 156, SPECTRUM[7]);
   if (Math.floor(time * 2) % 2 === 0) {
     drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER')) / 2), 168, SPECTRUM[14]);
   }

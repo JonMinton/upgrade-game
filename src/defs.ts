@@ -175,6 +175,7 @@ export interface Game {
   kills: number;     // times Kernagh was derezzed
   score: number; scored: boolean;
   entryActive: boolean; entryName: string;   // hi-score initials entry
+  mapName: string;   // which map this game is played on (tags score entries)
 }
 
 export interface Input { up: boolean; down: boolean; left: boolean; right: boolean; fire: boolean }

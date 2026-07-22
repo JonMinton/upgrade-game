@@ -4,7 +4,7 @@ import { Game, Input, CANVAS_W, CANVAS_H } from './defs';
 import { newGame, update, msg, finalScore } from './game';
 import { render } from './render';
 import { initAudio, setTitleMode, setMusicTier } from './audio';
-import { qualifies, addScore } from './hiscores';
+import { qualifies, addScore, cycleMapFilter } from './hiscores';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 canvas.width = CANVAS_W;
@@ -36,6 +36,7 @@ window.addEventListener('keydown', e => {
         name: g.entryName.padEnd(3, '.'),
         score: g.score,
         mode: g.difficulty === 'hard' ? 'H' : 'E',
+        map: g.mapName,
       });
       g.entryActive = false;
     }
@@ -45,6 +46,7 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Enter') { enterPressed = true; initAudio(); e.preventDefault(); return; }
   if (e.key === 'h' || e.key === 'H') hardPressed = true;
   if (e.key === ' ') spacePressed = true;
+  if ((e.key === 'm' || e.key === 'M') && g.mode === 'title') cycleMapFilter();
   const k = KEYMAP[e.key];
   if (k) { input[k] = true; initAudio(); e.preventDefault(); }
 });

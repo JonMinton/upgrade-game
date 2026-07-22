@@ -219,3 +219,36 @@ increasingly rich stereo samples as he pulls ahead.
   localStorage (per-browser; an online table would need a server). Qualifying
   ends open a 3-character arcade initials entry on the end screen; the table
   is the third screen in the title rotation (title → guide → hall).
+
+### Playtest round 6 (2026-07-22)
+
+- **Map-tagged scores:** every hi-score entry records the map it was set on
+  (built-in map is "VALE"; custom maps carry the name set in the editor).
+  The Hall shows all maps merged by default; **M** cycles a per-map filter.
+  The EASY/HARD column was dropped — the ×2 hard multiplier means hard scores
+  dominate a merged board anyway (mode is still stored per entry).
+- **Multiple maps as first-class content:** `maps/` in the repo holds
+  shareable map JSONs (`{name, tiles}`), starting with `maps/vale.json`
+  (the built-in map exported from the generator). Playtester contributions
+  arrive as PRs into that folder; see `maps/README.md` for the workflow.
+- **Editor upgrades:** map-name field (tags scores), "load json" (import a
+  contributed map), "blank map" (empty bordered field to build from nothing),
+  and an **arena paint mode** — the whole-world view now supports drag
+  painting/erasing for coherent large-scale features (rivers, hedgerows),
+  while the screen view remains the fine-tuning, player's-eye editor
+  (toggle button; shift-click still selects a screen while painting).
+
+## Future work
+
+- **Server-backed Hall of Signals.** localStorage is per-browser; the plan:
+  a small API (e.g. a Cloudflare Worker + KV, or any tiny host) with
+  `POST /scores {name, score, mode, map, timeSecs}` and
+  `GET /scores?map=...&limit=...`; the client falls back to localStorage
+  offline and merges on next load. Needs light abuse controls (length/rate
+  caps, server-side score sanity bounds — max plausible score per minute)
+  and a shared map registry so contributed maps have canonical names
+  (likely: the `maps/` folder is the registry; the server validates map
+  names against it). Score submissions should eventually carry a map hash
+  rather than trust the name alone.
+- **Kernagh learns the icewand** (he currently always carries fire).
+- Possible 7×5 arena if the 6×4 maze starts feeling small.
