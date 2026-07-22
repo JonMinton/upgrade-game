@@ -15,6 +15,7 @@ export const WORLD_H = WORLD_TH * TILE;
 export const Tl = {
   GRASS: 0, PATH: 1, TREE: 2, WATER: 3, REED: 4, WALL: 5,
   ROCK: 6, STONE: 7, ALTAR: 8, SHRINE: 9, WELL: 10, HUT: 11, BERRY: 12,
+  DIRT: 13,
 } as const;
 
 export const SOLID = new Set<number>([Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT]);
@@ -56,6 +57,7 @@ TILE_ATTR[Tl.SHRINE] = [14, 0];
 TILE_ATTR[Tl.WELL] = [7, 0];
 TILE_ATTR[Tl.HUT] = [10, 0];
 TILE_ATTR[Tl.BERRY] = [4, 0];
+TILE_ATTR[Tl.DIRT] = [0, 0];   // bare earth: pure void at Spectrum tiers
 
 // Direct-render colour themes for tiers 3..5
 export interface Theme {

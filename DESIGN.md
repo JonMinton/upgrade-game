@@ -238,6 +238,33 @@ increasingly rich stereo samples as he pulls ahead.
   while the screen view remains the fine-tuning, player's-eye editor
   (toggle button; shift-click still selects a screen while painting).
 
+### Playtest round 7 (2026-07-22)
+
+- **Editor:** brush width selector (1/2/3/5 — area tiles only; shrines,
+  berries, wells and altars always place singly), an explicit eraser palette
+  entry plus a "clear screen" button, and a **dirt** tile — a second walkable
+  background that renders as pure void black at Spectrum tiers and flat earth
+  at T3+.
+- **Rule-based feature generator** (`src/rulegen.ts`, editor "generate" +
+  seed field). Features grow from rules rather than templates:
+  1. *Rivers* flow edge-to-edge with momentum and meander; ~60% fork a
+     tributary toward the nearer edge.
+  2. *Forests* grow as blob clusters; rocky patches and dirt clearings vary
+     the ground; *reeds* colonise river banks.
+  3. *Berries* are placed by weighted acceptance: ~10x likelier where ≥2
+     trees stand within 2 tiles — so they concentrate in woodland.
+  4. *The stone circle repels both bases*: 200 candidate points scored by
+     minimum distance to either home; the best wins.
+  5. *Shrines* scatter poisson-style (≥17 tiles apart, away from POIs).
+  6. *Bridges want to exist where they open the world*: candidate crossings
+     (short water runs with walkable banks) are added greedily while any
+     walkable region remains unreachable from the player's home.
+  7. A final repair pass guarantees every shrine, berry, the altar and the
+     keep are walkable (verified across seeds).
+  Bases stay at the canonical corners for now because the engine pins homes
+  there; true mutually-repelling base placement needs home-marker tiles —
+  listed under future work.
+
 ## Future work
 
 - **Server-backed Hall of Signals.** localStorage is per-browser; the plan:
@@ -252,3 +279,10 @@ increasingly rich stereo samples as he pulls ahead.
   rather than trust the name alone.
 - **Kernagh learns the icewand** (he currently always carries fire).
 - Possible 7×5 arena if the 6×4 maze starts feeling small.
+- **Movable, mutually-repelling bases** in the rule generator: needs
+  home-marker tiles (or a map metadata block) so `worldFromTiles` can derive
+  home/station positions instead of pinning them to the corners; then base
+  placement becomes the same candidate-scoring rule the stone circle uses.
+- **More generator rules to explore:** paths that grow between POIs along
+  near-optimal walking routes (desire lines); clearings around shrines;
+  river fords vs bridges; biome-consistent screen naming for the minimap.

@@ -427,6 +427,14 @@ function drawTileDirect(
       c.fillStyle = th.tree3;
       c.beginPath(); c.arc(x + 3, y + 3.5, 1.6, 0, Math.PI * 2); c.fill();
       break;
+    case Tl.DIRT:
+      c.fillStyle = tier >= 5 ? '#66522f' : tier >= 4 ? '#5f4c31' : '#57452e';
+      c.fillRect(x, y, 8, 8);
+      if ((wtx * 11 + wty * 7) % 4 === 0) {
+        c.fillStyle = 'rgba(0,0,0,0.2)';
+        c.fillRect(x + ((wtx * 3) % 6), y + ((wty * 5) % 6), 2, 1);
+      }
+      break;
   }
 }
 

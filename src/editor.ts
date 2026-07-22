@@ -7,17 +7,22 @@ import {
   WORLD_SW, WORLD_SH, START_TIER,
 } from './defs';
 import { genWorld, worldFromTiles, poisReachable } from './map';
+import { ruleGenTiles } from './rulegen';
 import { renderPlay } from './render';
 
 const LS_KEY = 'upgrade-map';
 
 const TILE_NAMES: [number, string, string][] = [
-  [Tl.GRASS, 'grass', '#1c4a1c'], [Tl.PATH, 'path', '#b09a50'], [Tl.TREE, 'tree', '#2e8a2e'],
+  [Tl.GRASS, 'grass', '#1c4a1c'], [Tl.DIRT, 'dirt', '#57452e'], [Tl.PATH, 'path', '#b09a50'],
+  [Tl.TREE, 'tree', '#2e8a2e'],
   [Tl.WATER, 'water', '#2a4ac0'], [Tl.REED, 'reed', '#6aa84f'], [Tl.WALL, 'wall', '#909090'],
   [Tl.ROCK, 'rock', '#6a6a72'], [Tl.STONE, 'stone', '#e8e8f0'], [Tl.ALTAR, 'altar', '#40e0e8'],
   [Tl.SHRINE, 'shrine', '#e8d040'], [Tl.WELL, 'well', '#b8b8c8'], [Tl.HUT, 'hut', '#c05838'],
   [Tl.BERRY, 'berry', '#d04058'],
 ];
+
+// Point features never take a wide brush; area tiles do.
+const SINGLE_PLACE = new Set<number>([Tl.SHRINE, Tl.BERRY, Tl.WELL, Tl.ALTAR]);
 
 let tiles: Uint8Array;
 try {
@@ -95,6 +100,20 @@ for (const [id, name, color] of TILE_NAMES) {
   b.style.borderBottom = `3px solid ${color}`;
   if (id === selTile) b.classList.add('sel');
 }
+// Eraser: conceptually distinct from "paint grass", functionally the same.
+const eraserBtn = button('eraser', () => { selTile = Tl.GRASS; markSel('tile', eraserBtn); }, 'tile');
+eraserBtn.style.borderBottom = '3px solid #000';
+
+// Brush width (area tiles only; point features always place singly).
+let brush = 1;
+const brushLbl = document.createElement('span');
+brushLbl.className = 'lbl';
+brushLbl.textContent = 'brush:';
+bar.appendChild(brushLbl);
+for (const b of [1, 2, 3, 5]) {
+  const btn = button(`${b}`, () => { brush = b; markSel('brush', btn); }, 'brush');
+  if (b === 1) btn.classList.add('sel');
+}
 const spacer = document.createElement('span');
 spacer.className = 'lbl';
 spacer.textContent = 'tier:';
@@ -130,6 +149,30 @@ button('reset to built-in', () => {
   tiles = genWorld().tiles.slice();
   rebuild();
   say('reset to the generated map (not yet applied)');
+});
+button('clear screen', () => {
+  for (let ly = 0; ly < SCR_TH; ly++) {
+    for (let lx = 0; lx < SCR_TW; lx++) {
+      const tx = sel.x * SCR_TW + lx, ty = sel.y * SCR_TH + ly;
+      if (tx > 0 && ty > 0 && tx < WORLD_TW - 1 && ty < WORLD_TH - 1) tiles[ty * WORLD_TW + tx] = Tl.GRASS;
+    }
+  }
+  rebuild();
+  say(`cleared screen (${sel.x},${sel.y}) to grass`);
+});
+// Rule-based generator: rivers, forests, rock, berries-near-trees,
+// repelled stone circle, spaced shrines, accessibility-driven bridges.
+const seedInput = document.createElement('input');
+seedInput.value = '1';
+seedInput.style.cssText = 'width:52px;background:#262636;color:#ddd;border:1px solid #444;font:12px monospace;padding:4px';
+seedInput.title = 'generator seed';
+bar.appendChild(seedInput);
+button('generate', () => {
+  const seed = parseInt(seedInput.value, 10) || 1;
+  tiles = ruleGenTiles(seed);
+  nameInput.value = `GEN${seed}`.slice(0, 6);
+  rebuild();
+  say(`generated map from seed ${seed} — check connectivity, tweak, then apply/download`);
 });
 button('blank map', () => {
   tiles = new Uint8Array(WORLD_TW * WORLD_TH).fill(Tl.GRASS);
@@ -213,11 +256,7 @@ function paintArenaAt(e: MouseEvent): void {
   const tx = Math.floor((e.clientX - r.left) / r.width * WORLD_TW);
   const ty = Math.floor((e.clientY - r.top) / r.height * WORLD_TH);
   if (tx < 0 || ty < 0 || tx >= WORLD_TW || ty >= WORLD_TH) return;
-  const t = arenaPainting === 2 ? Tl.GRASS : selTile;
-  if (tiles[ty * WORLD_TW + tx] !== t) {
-    tiles[ty * WORLD_TW + tx] = t;
-    rebuild();
-  }
+  stampBrush(tx, ty, arenaPainting === 2);
 }
 
 arena.addEventListener('contextmenu', e => e.preventDefault());
@@ -240,6 +279,22 @@ arena.addEventListener('mousedown', e => {
 arena.addEventListener('mousemove', e => { if (arenaPainting) paintArenaAt(e); });
 window.addEventListener('mouseup', () => { arenaPainting = 0; });
 
+// --- brush stamping shared by both canvases
+function stampBrush(tx: number, ty: number, erase: boolean): void {
+  const t = erase ? Tl.GRASS : selTile;
+  const b = SINGLE_PLACE.has(t) ? 1 : brush;
+  const off = Math.floor(b / 2);
+  let changed = false;
+  for (let dy = 0; dy < b; dy++) {
+    for (let dx = 0; dx < b; dx++) {
+      const x = tx - off + dx, y = ty - off + dy;
+      if (x < 1 || y < 1 || x >= WORLD_TW - 1 || y >= WORLD_TH - 1) continue;
+      if (tiles[y * WORLD_TW + x] !== t) { tiles[y * WORLD_TW + x] = t; changed = true; }
+    }
+  }
+  if (changed) rebuild();
+}
+
 // --- screen painting
 let painting = 0; // 0 none, 1 paint, 2 erase
 function paintAt(e: MouseEvent): void {
@@ -247,12 +302,7 @@ function paintAt(e: MouseEvent): void {
   const lx = Math.floor((e.clientX - r.left) / r.width * SCR_TW);
   const ly = Math.floor((e.clientY - r.top) / r.height * SCR_TH);
   if (lx < 0 || ly < 0 || lx >= SCR_TW || ly >= SCR_TH) return;
-  const tx = sel.x * SCR_TW + lx, ty = sel.y * SCR_TH + ly;
-  const t = painting === 2 ? Tl.GRASS : selTile;
-  if (tiles[ty * WORLD_TW + tx] !== t) {
-    tiles[ty * WORLD_TW + tx] = t;
-    rebuild();
-  }
+  stampBrush(sel.x * SCR_TW + lx, sel.y * SCR_TH + ly, painting === 2);
 }
 screenC.addEventListener('contextmenu', e => e.preventDefault());
 screenC.addEventListener('mousedown', e => { painting = e.button === 2 ? 2 : 1; paintAt(e); });
