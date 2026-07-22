@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UPGRADE map editor</title>
+    <style>
+      body { margin: 0; background: #14141c; color: #ddd; font: 13px monospace; }
+      #bar { padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      button { background: #262636; color: #ddd; border: 1px solid #444; padding: 4px 8px;
+               font: 12px monospace; cursor: pointer; }
+      button.sel { background: #4a4a72; border-color: #99f; }
+      #wrap { display: flex; gap: 12px; padding: 0 8px 8px; flex-wrap: wrap; }
+      canvas { image-rendering: pixelated; background: #000; }
+      #arena { width: 768px; height: 352px; }
+      #screen { width: 768px; height: 528px; cursor: crosshair; }
+      #status { padding: 4px 8px; color: #9c9; }
+      .lbl { opacity: 0.6; margin-left: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="bar"></div>
+    <div id="status">ready</div>
+    <div id="wrap">
+      <div>
+        <div class="lbl">ARENA (click a screen to edit it)</div>
+        <canvas id="arena" width="768" height="352"></canvas>
+      </div>
+      <div>
+        <div class="lbl">SCREEN (left-drag: paint, right-drag: grass)</div>
+        <canvas id="screen" width="256" height="176"></canvas>
+      </div>
+    </div>
+    <script type="module" src="/src/editor.ts"></script>
+  </body>
+</html>

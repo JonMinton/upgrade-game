@@ -1,4 +1,7 @@
-// World generation: 6x4 flick-screens, seeded and deterministic.
+// World generation and world loading.
+// The shipped map is FIXED: one hard-coded seed, identical world every game.
+// The generator is an authoring tool; edited maps (from the tile editor) load
+// through worldFromTiles(), which derives shrines/berries/altar by scanning.
 
 import {
   SCR_TW, SCR_TH, TILE, WORLD_TW, WORLD_TH, Tl, SOLID, World, Vec,
@@ -25,6 +28,65 @@ export function solidTile(w: World, tx: number, ty: number): boolean {
 
 export function solidPx(w: World, x: number, y: number): boolean {
   return solidTile(w, Math.floor(x / TILE), Math.floor(y / TILE));
+}
+
+const P_HOME_TX = 14, P_HOME_TY = 3 * SCR_TH + 12;
+const R_HOME_TX = 5 * SCR_TW + 16, R_HOME_TY = 3 * SCR_TH + 14;
+
+function floodFrom(tiles: Uint8Array, tx: number, ty: number): Uint8Array {
+  const reach = new Uint8Array(WORLD_TW * WORLD_TH);
+  const q = [ty * WORLD_TW + tx];
+  reach[q[0]] = 1;
+  while (q.length) {
+    const cur = q.pop()!;
+    const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
+      const ni = ny * WORLD_TW + nx;
+      if (!reach[ni] && !SOLID.has(tiles[ni])) { reach[ni] = 1; q.push(ni); }
+    }
+  }
+  return reach;
+}
+
+function scanTiles(tiles: Uint8Array, t: number): Vec[] {
+  const out: Vec[] = [];
+  for (let ty = 0; ty < WORLD_TH; ty++) {
+    for (let tx = 0; tx < WORLD_TW; tx++) {
+      if (tiles[ty * WORLD_TW + tx] === t) out.push({ x: tx, y: ty });
+    }
+  }
+  return out;
+}
+
+// Build a playable World from a raw tile array (generated or hand-edited).
+export function worldFromTiles(tiles: Uint8Array): World {
+  const altarTiles = scanTiles(tiles, Tl.ALTAR);
+  let ax = (3 * SCR_TW + 16) * TILE, ay = 11 * TILE;
+  if (altarTiles.length) {
+    ax = (altarTiles.reduce((s, v) => s + v.x, 0) / altarTiles.length + 0.5) * TILE;
+    ay = (altarTiles.reduce((s, v) => s + v.y, 0) / altarTiles.length + 0.5) * TILE;
+  }
+  return {
+    tiles,
+    shrines: scanTiles(tiles, Tl.SHRINE),
+    berrySpots: scanTiles(tiles, Tl.BERRY),
+    altarX: ax, altarY: ay,
+    pHomeX: P_HOME_TX * TILE, pHomeY: P_HOME_TY * TILE,
+    rHomeX: R_HOME_TX * TILE, rHomeY: R_HOME_TY * TILE,
+  };
+}
+
+// True when every shrine, berry, the altar, and both homes are mutually walkable.
+export function poisReachable(w: World): boolean {
+  const reach = floodFrom(w.tiles, P_HOME_TX, P_HOME_TY);
+  const pois: Vec[] = [
+    ...w.shrines, ...w.berrySpots,
+    { x: Math.floor(w.altarX / TILE), y: Math.floor(w.altarY / TILE) },
+    { x: R_HOME_TX, y: R_HOME_TY },
+  ];
+  return pois.every(p => reach[p.y * WORLD_TW + p.x]);
 }
 
 // Region per screen
@@ -56,7 +118,6 @@ export function genWorld(): World {
       }
     }
   };
-  // In-screen barrier: a straight run of solid tiles partway across a screen.
   const barLine = (x0: number, y0: number, horiz: boolean, len: number, t: number) => {
     for (let i = 0; i < len; i++) onGrass(x0 + (horiz ? i : 0), y0 + (horiz ? 0 : i), t);
   };
@@ -71,17 +132,24 @@ export function genWorld(): World {
         barLine(bx + 2 + Math.floor(rng() * (horiz ? 24 : 28)),
           by + 2 + Math.floor(rng() * (horiz ? 18 : 12)), horiz, len, t);
       };
+      const berries = (n: number) => {
+        for (let i = 0; i < n; i++) {
+          onGrass(bx + 2 + Math.floor(rng() * 28), by + 2 + Math.floor(rng() * 18), Tl.BERRY);
+        }
+      };
       const reg = region(sx, sy);
       if (reg === 'forest') {
         for (let i = 0; i < 12; i++) {
           blob(bx + 2 + Math.floor(rng() * 28), by + 2 + Math.floor(rng() * 18), 1 + rng() * 1.6, Tl.TREE);
         }
         for (let i = 0; i < 3; i++) rndBar(Tl.TREE);
+        berries(2);
       } else if (reg === 'meadow') {
         for (let i = 0; i < 8; i++) {
           onGrass(bx + 2 + Math.floor(rng() * 28), by + 2 + Math.floor(rng() * 18), rng() < 0.7 ? Tl.TREE : Tl.ROCK);
         }
         for (let i = 0; i < 2; i++) rndBar(rng() < 0.6 ? Tl.TREE : Tl.ROCK);
+        berries(1);
       } else if (reg === 'marsh') {
         for (let i = 0; i < 5; i++) {
           blob(bx + 3 + Math.floor(rng() * 26), by + 3 + Math.floor(rng() * 16), 1 + rng() * 1.8, Tl.WATER);
@@ -90,6 +158,7 @@ export function genWorld(): World {
         for (let i = 0; i < 16; i++) {
           onGrass(bx + 2 + Math.floor(rng() * 28), by + 2 + Math.floor(rng() * 18), Tl.REED);
         }
+        berries(1);
       } else if (reg === 'village') {
         for (let y = 2; y <= 6; y++) for (let x = 3; x <= 9; x++) L(x, y, Tl.HUT);
         for (let y = 2; y <= 6; y++) for (let x = 20; x <= 26; x++) L(x, y, Tl.HUT);
@@ -97,8 +166,8 @@ export function genWorld(): World {
         L(12, 7, Tl.WELL);
         for (let i = 0; i < 4; i++) onGrass(bx + 20 + Math.floor(rng() * 10), by + 14 + Math.floor(rng() * 6), Tl.TREE);
         rndBar(Tl.TREE);
+        berries(1);
       } else if (reg === 'keep') {
-        // Walls drawn with explicit gates (south, west, north).
         const gate = (lx: number, ly: number) =>
           (ly === 19 && (lx === 15 || lx === 16)) || (lx === 3 && (ly === 10 || ly === 11))
           || (ly === 2 && (lx === 15 || lx === 16));
@@ -116,7 +185,6 @@ export function genWorld(): World {
         }
         for (let i = 0; i < 5; i++) onGrass(bx + 11 + Math.floor(rng() * 10), by + 4 + Math.floor(rng() * 5), Tl.ROCK);
       } else if (reg === 'stones') {
-        // Ring with two deliberate gaps (entrances SW and NE).
         for (let i = 0; i < 14; i++) {
           if (i === 3 || i === 10) continue;
           const a = (i / 14) * Math.PI * 2;
@@ -136,7 +204,6 @@ export function genWorld(): World {
       set(tx, ty, BRIDGE_COLS.has(tx) ? Tl.PATH : Tl.WATER);
     }
   }
-  // Bridge approaches.
   for (const tx of BRIDGE_COLS) {
     for (let ty = 40; ty <= 46; ty++) if (get(tx, ty) !== Tl.PATH) set(tx, ty, Tl.PATH);
   }
@@ -165,8 +232,7 @@ export function genWorld(): World {
     }
   }
 
-  // Doorways: every OPEN screen edge gets one randomly-placed gateway instead
-  // of the old wall-to-wall crossroads.
+  // Doorways: every OPEN screen edge gets one randomly-placed gateway.
   const ewClosed = new Set(closedEW.map(([a, b]) => `${a},${b}`));
   const nsClosed = new Set(closedNS.map(([a, b]) => `${a},${b}`));
   for (let sy = 0; sy < 4; sy++) {
@@ -195,12 +261,12 @@ export function genWorld(): World {
   for (let tx = 0; tx < WORLD_TW; tx++) { set(tx, 0, Tl.TREE); set(tx, WORLD_TH - 1, Tl.TREE); }
   for (let ty = 0; ty < WORLD_TH; ty++) { set(0, ty, Tl.TREE); set(WORLD_TW - 1, ty, Tl.TREE); }
 
-  // Shrines: (screen sx, sy, local lx, ly)
+  // Shrines: (screen sx, sy, local lx, ly) — 14 of them.
   const shrineDefs: [number, number, number, number][] = [
     [0, 3, 25, 15], [1, 1, 6, 5], [2, 2, 24, 16], [3, 1, 8, 15], [4, 2, 20, 4],
     [5, 0, 8, 14], [4, 1, 22, 6], [5, 3, 18, 13], [0, 0, 10, 6], [2, 3, 10, 16],
+    [1, 0, 20, 6], [2, 1, 24, 5], [5, 2, 10, 8], [3, 3, 24, 7],
   ];
-  const shrines: Vec[] = [];
   for (const [sx, sy, lx, ly] of shrineDefs) {
     const tx = sx * SCR_TW + lx, ty = sy * SCR_TH + ly;
     set(tx, ty, Tl.SHRINE);
@@ -209,65 +275,40 @@ export function genWorld(): World {
         if ((dx || dy) && SOLID.has(get(tx + dx, ty + dy))) set(tx + dx, ty + dy, Tl.GRASS);
       }
     }
-    shrines.push({ x: tx, y: ty });
   }
 
-  // --- Connectivity repair: the decor is random, so PROVE every point of
-  // interest is walkable from the player's home; carve an emergency path if not.
-  const pTx = 14, pTy = 3 * SCR_TH + 12;
-  const flood = (): Uint8Array => {
-    const reach = new Uint8Array(WORLD_TW * WORLD_TH);
-    const q = [pTy * WORLD_TW + pTx];
-    reach[q[0]] = 1;
-    while (q.length) {
-      const cur = q.pop()!;
-      const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const nx = cx + dx, ny = cy + dy;
-        if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
-        const ni = ny * WORLD_TW + nx;
-        if (!reach[ni] && !SOLID.has(tiles[ni])) { reach[ni] = 1; q.push(ni); }
+  // Clear a patch around homes.
+  for (const [htx, hty] of [[P_HOME_TX, P_HOME_TY], [R_HOME_TX, R_HOME_TY]]) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (SOLID.has(get(htx + dx, hty + dy))) set(htx + dx, hty + dy, Tl.GRASS);
       }
     }
-    return reach;
-  };
-  const pois: Vec[] = [
-    ...shrines,
-    { x: 3 * SCR_TW + 16, y: 11 },                       // altar
-    { x: 5 * SCR_TW + 16, y: 3 * SCR_TH + 14 },          // rival home
+  }
+
+  // --- Connectivity repair: PROVE every point of interest is walkable from
+  // the player's home; carve an emergency path if not.
+  const pois = [
+    ...scanTiles(tiles, Tl.SHRINE),
+    ...scanTiles(tiles, Tl.BERRY),
+    { x: 3 * SCR_TW + 16, y: 11 },
+    { x: R_HOME_TX, y: R_HOME_TY },
   ];
-  let reach = flood();
+  let reach = floodFrom(tiles, P_HOME_TX, P_HOME_TY);
   for (const poi of pois) {
     if (reach[poi.y * WORLD_TW + poi.x]) continue;
-    // Carve an L-shaped corridor toward home until we touch reached ground.
     let cx = poi.x, cy = poi.y;
     let guard = 600;
     while (!reach[cy * WORLD_TW + cx] && guard-- > 0) {
       if (SOLID.has(get(cx, cy))) set(cx, cy, Tl.PATH);
-      if (cx !== pTx) cx += Math.sign(pTx - cx);
-      else if (cy !== pTy) cy += Math.sign(pTy - cy);
+      if (cx !== P_HOME_TX) cx += Math.sign(P_HOME_TX - cx);
+      else if (cy !== P_HOME_TY) cy += Math.sign(P_HOME_TY - cy);
       else break;
     }
-    reach = flood();
+    reach = floodFrom(tiles, P_HOME_TX, P_HOME_TY);
   }
 
-  const w: World = {
-    tiles, shrines,
-    altarX: (3 * SCR_TW + 16) * TILE, altarY: 11 * TILE,
-    pHomeX: (0 * SCR_TW + 14) * TILE, pHomeY: (3 * SCR_TH + 12) * TILE,
-    rHomeX: (5 * SCR_TW + 16) * TILE, rHomeY: (3 * SCR_TH + 14) * TILE,
-  };
-
-  // Clear a patch around homes and altar approach.
-  for (const [hx, hy] of [[w.pHomeX, w.pHomeY], [w.rHomeX, w.rHomeY]]) {
-    const tx = Math.floor(hx / TILE), ty = Math.floor(hy / TILE);
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (SOLID.has(get(tx + dx, ty + dy))) set(tx + dx, ty + dy, Tl.GRASS);
-      }
-    }
-  }
-  return w;
+  return worldFromTiles(tiles);
 }
 
 // Axis-separated bbox move. Half-extent 3px: a body centred on a tile centre

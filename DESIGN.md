@@ -164,3 +164,25 @@ increasingly rich stereo samples as he pulls ahead.
 - **Fair fire:** Kernagh now shoots only in the four cardinal directions,
   like the player, and only when roughly aligned.
 - **T0 shard signalling:** with no colour available, shards blink at ~1.5 Hz.
+
+### Playtest round 3 (2026-07-22)
+
+- **T0 shard flash actually reads now:** the shrine pedestal (which rendered as
+  a permanently-lit block, masking the blink) is hidden at T0, and the on-phase
+  shard carries a large pulsing diamond burst.
+- **Berries:** bushes scattered across the map (densest in the Greenwood) heal
+  1 ♥ when walked over below full health; each bush regrows after ~30 s.
+  Kernagh seeks nearby berries when hurt. Berries are a paintable tile type.
+- **Two wands:** a swap pedestal in each wizard's home village toggles
+  firewand (1 damage + 0.4 s stagger — the default) and icewand (no damage,
+  3.5 s freeze). The pedestal icon always shows the wand you'd swap TO.
+  Offensive vs defensive playstyles; Kernagh keeps firewand for now.
+- **14 shrines** (up from 10); still 4 starting shards.
+- **Title flow:** title and a "HOW TO PLAY" icon guide alternate every 6 s
+  (shards, stone circle, berries, wands, Kernagh, river).
+- **Music:** in-game tune now runs A-A-B-A with a higher-contour bridge.
+- **Map tile editor** (`/editor.html`): whole-arena schematic + live per-screen
+  preview through the real T0–T5 renderers; paint tiles, check connectivity,
+  download JSON, and "apply to game" via localStorage (the game loads the
+  override on new game; "clear override" restores the built-in map).
+- Pacing after all of the above: idle-player loss at ~6.2 min.

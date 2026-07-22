@@ -14,7 +14,7 @@ export const WORLD_H = WORLD_TH * TILE;
 // Tile ids
 export const Tl = {
   GRASS: 0, PATH: 1, TREE: 2, WATER: 3, REED: 4, WALL: 5,
-  ROCK: 6, STONE: 7, ALTAR: 8, SHRINE: 9, WELL: 10, HUT: 11,
+  ROCK: 6, STONE: 7, ALTAR: 8, SHRINE: 9, WELL: 10, HUT: 11, BERRY: 12,
 } as const;
 
 export const SOLID = new Set<number>([Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT]);
@@ -55,6 +55,7 @@ TILE_ATTR[Tl.ALTAR] = [13, 0];
 TILE_ATTR[Tl.SHRINE] = [14, 0];
 TILE_ATTR[Tl.WELL] = [7, 0];
 TILE_ATTR[Tl.HUT] = [10, 0];
+TILE_ATTR[Tl.BERRY] = [4, 0];
 
 // Direct-render colour themes for tiers 3..5
 export interface Theme {
@@ -109,21 +110,36 @@ export const SHARD_INK = 13;    // bright cyan
 
 export interface Vec { x: number; y: number }
 
+export type Wand = 'fire' | 'ice';
+
 export interface Ent {
   x: number; y: number; facing: number;   // 0 down 1 up 2 left 3 right
   hp: number; tier: number; shards: number;
   cool: number; channel: number; inv: number; regen: number;
+  stun: number;                 // frozen/staggered: no moving, no firing
+  wand: Wand; onStation: boolean;
   animDist: number; stepAcc: number;
   homeX: number; homeY: number; rival: boolean;
 }
 
-export interface Bolt { x: number; y: number; vx: number; vy: number; life: number; fromRival: boolean; tier: number }
+export interface Bolt {
+  x: number; y: number; vx: number; vy: number; life: number;
+  fromRival: boolean; tier: number; kind: Wand;
+}
+
+export const FREEZE_TIME = 3.5;   // icewand freeze
+export const STAGGER_TIME = 0.4;  // firewand stun
+
+// Wand-swap stations, one per home village (world px).
+export const P_STATION = { x: (0 * 32 + 17) * TILE + 4, y: (3 * 22 + 12) * TILE + 4 };
+export const R_STATION = { x: (5 * 32 + 13) * TILE + 4, y: (3 * 22 + 14) * TILE + 4 };
 export interface Shard { x: number; y: number }
 export interface Fx { x: number; y: number; t0: number; kind: number } // 0 derez, 1 spawn, 2 upgrade
 
 export interface World {
   tiles: Uint8Array;
   shrines: Vec[];              // tile coords
+  berrySpots: Vec[];           // tile coords of berry bushes
   altarX: number; altarY: number;   // px
   pHomeX: number; pHomeY: number;
   rHomeX: number; rHomeY: number;
@@ -141,6 +157,7 @@ export interface Game {
   time: number; world: World;
   player: Ent; rival: Ent;
   bolts: Bolt[]; shards: Shard[]; fx: Fx[];
+  berryCd: number[];           // per berry spot: >0 means eaten, regrowing
   respawn: number;
   msg: string; msgUntil: number;
   ripple: number; rippleFrom: number;   // ripple start time (-1 off), previous tier

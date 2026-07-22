@@ -10,14 +10,14 @@ const queue = new Int32Array(N);
 const depth = new Int32Array(N);
 let stamp = 0;
 
-// Flood-fill from the rival's tile to the closest shard BY WALKING DISTANCE.
-// Euclidean-nearest is a trap in a maze: two shards at similar straight-line
+// Flood-fill from the rival's tile to the closest point BY WALKING DISTANCE.
+// Euclidean-nearest is a trap in a maze: two targets at similar straight-line
 // range in opposite directions make a greedy chooser orbit forever.
-function nearestShardByPath(g: Game, sx: number, sy: number, maxDepth: number): Vec | null {
-  if (!g.shards.length) return null;
+function nearestPointByPath(g: Game, sx: number, sy: number, maxDepth: number, points: Vec[]): Vec | null {
+  if (!points.length) return null;
   const w = g.world;
   const shardTiles = new Map<number, Vec>();
-  for (const s of g.shards) {
+  for (const s of points) {
     shardTiles.set(Math.floor(s.y / TILE) * WORLD_TW + Math.floor(s.x / TILE), s);
   }
   stamp++;
@@ -97,6 +97,16 @@ function los(g: Game, x0: number, y0: number, x1: number, y1: number): boolean {
   return true;
 }
 
+// Nearest active berry within a short walk, in world px.
+function berryTarget(g: Game): Vec | null {
+  const r = g.rival;
+  const active: Vec[] = [];
+  g.world.berrySpots.forEach((b, i) => {
+    if (g.berryCd[i] <= 0) active.push({ x: b.x * TILE + 4, y: b.y * TILE + 4 });
+  });
+  return nearestPointByPath(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), 20, active);
+}
+
 // Chase only when it's genuinely threatening — not a standing stalk order.
 function interceptWorthwhile(g: Game, distP: number): boolean {
   const p = g.player, r = g.rival, ai = g.ai;
@@ -108,6 +118,7 @@ function interceptWorthwhile(g: Game, distP: number): boolean {
 
 export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) => void): void {
   const r = g.rival, p = g.player, ai = g.ai;
+  if (r.stun > 0) return;   // frozen or staggered: no thinking, no moving
   const distP = Math.hypot(p.x - r.x, p.y - r.y);
 
   // Channeling at the altar: stand still.
@@ -128,6 +139,11 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
     ai.state = 'ritual';
     target = { x: g.world.altarX, y: g.world.altarY };
     key = 'altar';
+  } else if (r.hp <= 2 && berryTarget(g)) {
+    ai.state = 'berry';
+    const b = berryTarget(g)!;
+    target = b;
+    key = `b${b.x | 0},${b.y | 0}`;
   } else if (interceptWorthwhile(g, distP)) {
     ai.state = 'intercept';
     ai.interceptT += dt;
@@ -141,9 +157,9 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
   } else {
     ai.state = 'forage';
     ai.interceptT = 0;
-    // Imperfect knowledge: he perceives shards within ~55 tiles of walking;
+    // Imperfect knowledge: he perceives shards within ~32 tiles of walking;
     // beyond that he patrols the shrines he knows.
-    const found = nearestShardByPath(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), 32);
+    const found = nearestPointByPath(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), 32, g.shards);
     if (found) {
       target = { x: found.x, y: found.y };
       key = `s${found.x | 0},${found.y | 0}`;

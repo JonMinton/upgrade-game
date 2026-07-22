@@ -1,10 +1,11 @@
 // Game state and simulation.
 
 import {
-  Game, Ent, Input, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, FINAL_CHANNEL_TIME,
+  Game, Ent, Input, World, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, FINAL_CHANNEL_TIME,
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
+  FREEZE_TIME, STAGGER_TIME, P_STATION,
 } from './defs';
-import { genWorld, moveEnt, solidPx, solidTile } from './map';
+import { genWorld, worldFromTiles, moveEnt, solidPx, solidTile } from './map';
 import { updateRival } from './ai';
 import { sfx, setMusicTier, SfxName } from './audio';
 
@@ -19,17 +20,26 @@ function makeEnt(x: number, y: number, rival: boolean): Ent {
   return {
     x, y, facing: 0, hp: 3, tier: START_TIER, shards: 0,
     cool: 0, channel: 0, inv: 0, regen: 0,
+    stun: 0, wand: 'fire', onStation: false,
     animDist: 0, stepAcc: 0, homeX: x, homeY: y, rival,
   };
 }
 
 export function newGame(): Game {
-  const world = genWorld();
+  // The tile editor can stage an alternative map via localStorage.
+  let world: World;
+  try {
+    const o = localStorage.getItem('upgrade-map');
+    world = o ? worldFromTiles(Uint8Array.from(JSON.parse(o) as number[])) : genWorld();
+  } catch {
+    world = genWorld();
+  }
   const g: Game = {
     mode: 'loading', loadT: 0, time: 0, world,
     player: makeEnt(world.pHomeX, world.pHomeY, false),
     rival: makeEnt(world.rHomeX, world.rHomeY, true),
     bolts: [], shards: [], fx: [],
+    berryCd: world.berrySpots.map(() => 0),
     respawn: RESPAWN_EVERY,
     msg: '', msgUntil: 0,
     ripple: -1, rippleFrom: START_TIER,
@@ -42,9 +52,10 @@ export function newGame(): Game {
   };
   // A modest starting scatter (4 shrines, spread across the map); the rest of
   // the economy comes from respawns, so neither racer can sprint the ladder.
-  for (const i of [1, 2, 5, 9]) {
+  const n = world.shrines.length;
+  for (const i of new Set([0, n >> 2, n >> 1, (3 * n) >> 2])) {
     const s = world.shrines[i];
-    g.shards.push({ x: s.x * TILE + 4, y: s.y * TILE + 4 });
+    if (s) g.shards.push({ x: s.x * TILE + 4, y: s.y * TILE + 4 });
   }
   return g;
 }
@@ -81,7 +92,7 @@ function fire(g: Game, e: Ent, dx: number, dy: number): void {
   g.bolts.push({
     x: e.x + (dx / d) * 9, y: e.y + (dy / d) * 9,
     vx: (dx / d) * BOLT_SPEED, vy: (dy / d) * BOLT_SPEED,
-    life: BOLT_LIFE, fromRival: e.rival, tier: e.tier,
+    life: BOLT_LIFE, fromRival: e.rival, tier: e.tier, kind: e.wand,
   });
   relSfx(g, 'zap', e.tier, e.x, e.y);
 }
@@ -128,7 +139,7 @@ function derez(g: Game, e: Ent): void {
   e.shards = 0;
   setTier(g, e, Math.max(0, e.tier - 1));
   e.x = e.homeX; e.y = e.homeY;
-  e.hp = 3; e.inv = 2; e.channel = 0;
+  e.hp = 3; e.inv = 2; e.channel = 0; e.stun = 0;
   relSfx(g, 'derez', e.tier, g.player.x, g.player.y);
   msg(g, e.rival ? 'KERNAGH DEREZZED! HE DROPS TO T' + e.tier : 'DEREZZED! YOU FALL TO T' + e.tier, 3);
 }
@@ -155,6 +166,21 @@ function pickups(g: Game, e: Ent): void {
       if (e.shards >= SHARDS_PER_UPGRADE) break;
     }
   }
+}
+
+const BERRY_REGROW = 30;
+
+function berryPickups(g: Game, e: Ent): void {
+  if (e.hp >= 3) return;
+  g.world.berrySpots.forEach((b, i) => {
+    if (g.berryCd[i] > 0) return;
+    if (Math.hypot(b.x * TILE + 4 - e.x, b.y * TILE + 4 - e.y) < 10) {
+      g.berryCd[i] = BERRY_REGROW;
+      e.hp = Math.min(3, e.hp + 1);
+      relSfx(g, 'berry', e.tier, e.x, e.y);
+      if (!e.rival) msg(g, 'BERRIES! +♥');
+    }
+  });
 }
 
 function ritual(g: Game, e: Ent, dt: number): void {
@@ -201,9 +227,9 @@ export function update(g: Game, inp: Input, dt: number): void {
   g.time += dt;
   const p = g.player, r = g.rival;
 
-  // --- Player movement
-  let dx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-  let dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+  // --- Player movement (locked while frozen/staggered)
+  let dx = p.stun > 0 ? 0 : (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+  let dy = p.stun > 0 ? 0 : (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
   if (dx && dy) { dx *= 0.7071; dy *= 0.7071; }
   if (dx || dy) {
     const m = moveEnt(g.world, p, dx * SPEED * dt, dy * SPEED * dt);
@@ -212,10 +238,21 @@ export function update(g: Game, inp: Input, dt: number): void {
     p.facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 1 : 0);
     if (p.stepAcc > 11) { p.stepAcc = 0; sfx('step', p.tier, 1); }
   }
-  if (inp.fire && p.cool <= 0) {
+  if (inp.fire && p.cool <= 0 && p.stun <= 0) {
     if (inSafe(p.x, p.y)) { sfx('deny', p.tier, 0.7); p.cool = 0.4; }
     else { const v = FACING_VECS[p.facing]; fire(g, p, v[0], v[1]); }
   }
+
+  // --- Wand station: walk onto your village pedestal to swap fire <-> ice.
+  const stD = Math.hypot(P_STATION.x - p.x, P_STATION.y - p.y);
+  if (stD < 10 && !p.onStation) {
+    p.wand = p.wand === 'fire' ? 'ice' : 'fire';
+    sfx('wand', p.tier);
+    msg(g, p.wand === 'ice'
+      ? 'ICEWAND - FREEZES BUT DOES NOT HARM'
+      : 'FIREWAND - HARMS WITH A BRIEF STUN', 3);
+  }
+  p.onStation = stD < 14;
 
   // --- Rival
   updateRival(g, dt, (bx, by) => fire(g, r, bx, by));
@@ -225,6 +262,7 @@ export function update(g: Game, inp: Input, dt: number): void {
   for (const e of [p, r]) {
     e.cool = Math.max(0, e.cool - dt);
     e.inv = Math.max(0, e.inv - dt);
+    e.stun = Math.max(0, e.stun - dt);
     e.regen += dt;
     if (e.regen > REGEN_EVERY) { e.regen = 0; if (e.hp < 3) e.hp++; }
   }
@@ -239,18 +277,29 @@ export function update(g: Game, inp: Input, dt: number): void {
     if (!gone && victim.inv <= 0 && !inSafe(victim.x, victim.y)
       && Math.hypot(b.x - victim.x, b.y - victim.y) < 8) {
       hit = true;
-      victim.hp--;
-      victim.inv = 0.8;
       victim.channel = 0;
-      relSfx(g, 'hit', b.tier, b.x, b.y);
-      if (victim.hp <= 0) derez(g, victim);
+      if (b.kind === 'ice') {
+        // Icewand: harmless but freezes solid for a long moment.
+        victim.stun = FREEZE_TIME;
+        victim.inv = 0.4;
+        relSfx(g, 'freeze', b.tier, b.x, b.y);
+      } else {
+        victim.hp--;
+        victim.stun = Math.max(victim.stun, STAGGER_TIME);
+        victim.inv = 0.8;
+        relSfx(g, 'hit', b.tier, b.x, b.y);
+        if (victim.hp <= 0) derez(g, victim);
+      }
     }
     if (gone || hit) g.bolts.splice(i, 1);
   }
 
-  // --- Shards: pickups + respawn
+  // --- Shards & berries: pickups + respawn
   pickups(g, p);
   pickups(g, r);
+  berryPickups(g, p);
+  berryPickups(g, r);
+  for (let i = 0; i < g.berryCd.length; i++) g.berryCd[i] = Math.max(0, g.berryCd[i] - dt);
   g.respawn -= dt;
   if (g.respawn <= 0) {
     g.respawn = RESPAWN_EVERY;

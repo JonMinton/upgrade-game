@@ -21,6 +21,15 @@ const BASS = [
   40, 0, 0, 0, 40, 0, 0, 0, 45, 0, 0, 0, 43, 0, 0, 0,
   40, 0, 0, 0, 40, 0, 0, 0, 38, 0, 0, 0, 43, 0, 0, 0,
 ];
+// Bridge section: higher contour, different roots. Arrangement is A A B A.
+const MEL_B = [
+  76, 0, 74, 0, 71, 0, 69, 0, 71, 0, 74, 0, 76, 0, 79, 0,
+  76, 0, 74, 0, 71, 0, 69, 0, 67, 0, 69, 0, 64, 0, 0, 0,
+];
+const BASS_B = [
+  45, 0, 0, 0, 45, 0, 0, 0, 43, 0, 0, 0, 43, 0, 0, 0,
+  45, 0, 0, 0, 40, 0, 0, 0, 38, 0, 0, 0, 40, 0, 0, 0,
+];
 
 const freq = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -127,22 +136,26 @@ function schedule(): void {
   if (!ac) return;
   while (nextNote < ac.currentTime + 0.16) {
     stepAt(step, nextNote);
-    step = (step + 1) % 32;
+    step = (step + 1) % 128;   // 4 sections of 32: A A B A
     nextNote += STEP;
   }
 }
 
-function stepAt(s: number, t: number): void {
+function stepAt(absStep: number, t: number): void {
+  const s = absStep % 32;
+  const bridge = Math.floor(absStep / 32) === 2;
+  const mel = bridge ? MEL_B : MEL;
+  const bass = bridge ? BASS_B : BASS;
   if (titleMode) {
     // Monophonic beeper: melody, else bass filling gaps — classic 48K trick.
-    const n = MEL[s] || (s % 4 === 0 ? BASS[s] + 24 : 0);
+    const n = mel[s] || (s % 4 === 0 ? bass[s] + 24 : 0);
     if (n) noteAt(t, freq(n), 0.11, 'square', 0.1);
     return;
   }
   const tier = musicTier;
   if (tier < 2) return;
-  const m = MEL[s];
-  const b = BASS[s];
+  const m = mel[s];
+  const b = bass[s];
   const melType: OscillatorType = tier >= 4 ? 'sawtooth' : 'square';
   const melVol = tier >= 4 ? 0.055 : 0.07;
   if (m) {
@@ -153,7 +166,7 @@ function stepAt(s: number, t: number): void {
     }
   }
   if (b) noteAt(t, freq(b), tier >= 3 ? 0.3 : 0.13, tier >= 3 ? 'triangle' : 'square', tier >= 3 ? 0.14 : 0.09);
-  if (tier >= 3 && s % 4 === 2) noteAt(t, freq(BASS[Math.floor(s / 4) * 4] + 12), 0.08, 'square', 0.025, 0.15);
+  if (tier >= 3 && s % 4 === 2) noteAt(t, freq(bass[Math.floor(s / 4) * 4] + 12), 0.08, 'square', 0.025, 0.15);
   if (tier >= 4) {
     if (s % 8 === 0) drumAt(t, 'kick');
     if (s % 8 === 4) drumAt(t, 'snare');
@@ -161,7 +174,9 @@ function stepAt(s: number, t: number): void {
   }
 }
 
-export type SfxName = 'step' | 'zap' | 'hit' | 'pickup' | 'derez' | 'upgrade' | 'ritual' | 'deny' | 'spawn';
+export type SfxName =
+  'step' | 'zap' | 'hit' | 'pickup' | 'derez' | 'upgrade' | 'ritual' | 'deny'
+  | 'spawn' | 'berry' | 'freeze' | 'wand';
 
 export function sfx(name: SfxName, tier: number, vol = 1, pan = 0): void {
   if (!ac || vol <= 0.01) return;
@@ -206,5 +221,20 @@ export function sfx(name: SfxName, tier: number, vol = 1, pan = 0): void {
     case 'spawn':
       tone(1200, 1900, 0.12, 'triangle', 0.06 * vol, pan);
       break;
+    case 'freeze':
+      tone(2200, 400, 0.4, 'triangle', 0.14 * vol, pan);
+      noise(0.3, 5000, 'highpass', 0.06 * vol, pan);
+      break;
+    case 'wand':
+      tone(440, 440, 0.07, 'square', 0.1 * vol, pan);
+      tone(660, 660, 0.07, 'square', 0.1 * vol, pan, 0.08);
+      tone(880, 880, 0.12, 'square', 0.1 * vol, pan, 0.16);
+      break;
+    case 'berry': {
+      const w2: OscillatorType = tier >= 3 ? 'triangle' : 'square';
+      tone(520, 520, 0.05, w2, 0.1 * vol, pan);
+      tone(780, 780, 0.09, w2, 0.1 * vol, pan, 0.06);
+      break;
+    }
   }
 }

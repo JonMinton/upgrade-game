@@ -8,12 +8,26 @@ import {
   Game, Ent, SCR_W, SCR_H, SCR_TW, SCR_TH, CANVAS_W, CANVAS_H, TILE, Tl, TIERS,
   SPECTRUM, TILE_ATTR, THEME, Theme, PLAYER_BANDS, RIVAL_BANDS, Bands,
   PLAYER_INKS, RIVAL_INKS, BOLT_INK, SHARD_INK, CHANNEL_TIME, clamp, screenOf,
+  P_STATION, R_STATION,
 } from './defs';
 import { tileAt } from './map';
 import {
   PATTERNS, GRASS_ALT, BOLT_PATS, shardPat, wizMask, bandOfRow,
+  BERRY_DOTS, WAND_FIRE, WAND_ICE, SHARD_TAPE,
 } from './sprites';
 import { drawText, textWidth } from './font';
+
+// Pulsing diamond burst for T0 shard signalling (16x16).
+const BURST = (() => {
+  const m = new Uint8Array(256);
+  for (let r = 0; r < 16; r++) {
+    for (let c = 0; c < 16; c++) {
+      const d = Math.abs(r - 7.5) + Math.abs(c - 7.5);
+      if (d >= 6 && d <= 8) m[r * 16 + c] = 1;
+    }
+  }
+  return m;
+})();
 
 const bmp = new Uint8Array(SCR_W * SCR_H);
 const inkA = new Uint8Array(SCR_TW * SCR_TH);
@@ -96,6 +110,18 @@ function drawMaskPixels(
   }
 }
 
+// Draw an 8-byte pattern directly to the canvas (direct pipeline + UI icons).
+function drawPat(
+  c: CanvasRenderingContext2D, rows: number[], x: number, y: number, color: string, scale = 1,
+): void {
+  c.fillStyle = color;
+  for (let r = 0; r < 8; r++) {
+    for (let b = 0; b < 8; b++) {
+      if (rows[r] & (0x80 >> b)) c.fillRect(x + b * scale, y + r * scale, scale, scale);
+    }
+  }
+}
+
 function entFrame(e: Ent): number {
   return Math.floor(e.animDist / 12) % 2;
 }
@@ -108,7 +134,12 @@ function entBob(e: Ent, moving = true): number {
 }
 
 function invisible(g: Game, e: Ent): boolean {
-  return e.inv > 0 && Math.floor(g.time * 12) % 2 === 0;
+  return e.inv > 0 && e.stun <= 0.6 && Math.floor(g.time * 12) % 2 === 0;
+}
+
+// A long stun is a freeze (icewand); a short one is just a stagger.
+function frozen(e: Ent): boolean {
+  return e.stun > 0.6;
 }
 
 // ---------- avatars ----------
@@ -124,6 +155,10 @@ function drawAvatarDirect(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: n
     c.fill();
   }
   drawMaskPixels(c, m, sx, sy - bob, r => bands[bandOfRow(r)]);
+  if (frozen(e)) {
+    c.fillStyle = 'rgba(140,224,255,0.5)';
+    c.fillRect(sx - 1, sy - 2, 18, 19);
+  }
   if (e.channel > 0) drawChannelBar(c, e, sx, sy, '#ffffff');
 }
 
@@ -132,7 +167,8 @@ function drawAvatarBlocky(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: n
   const m = wizMask(e.facing, e.tier === 0 ? 0 : entFrame(e));
   const [headInk, bodyInk] = e.rival ? RIVAL_INKS : PLAYER_INKS;
   drawMaskPixels(c, m, sx + 1, sy + 1, () => '#000000');
-  drawMaskPixels(c, m, sx, sy, r => SPECTRUM[e.tier === 0 ? 7 : r < 8 ? headInk : bodyInk]);
+  drawMaskPixels(c, m, sx, sy,
+    r => frozen(e) ? '#8ce0ff' : SPECTRUM[e.tier === 0 ? 7 : r < 8 ? headInk : bodyInk]);
   if (e.channel > 0) drawChannelBar(c, e, sx, sy, SPECTRUM[headInk]);
 }
 
@@ -157,7 +193,8 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
       const tx = camTx + cx, ty = camTy + cy;
       const t = tileAt(w, tx, ty);
       const pat = t === Tl.GRASS && ((tx + ty) & 1) ? GRASS_ALT : PATTERNS[t];
-      stampPat(cx * 8, cy * 8, pat);
+      // At T0 the shrines are too degraded to render — the blinking shard IS the signal.
+      if (!(envTier === 0 && t === Tl.SHRINE)) stampPat(cx * 8, cy * 8, pat);
       const ci = cy * SCR_TW + cx;
       inkA[ci] = TILE_ATTR[t][0];
       papA[ci] = TILE_ATTR[t][1];
@@ -165,15 +202,36 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
   }
 
   // Shards (world objects: env tier look). At T0 there's no colour to signal
-  // with, so they BLINK — the monochrome era's way of saying "look here".
+  // with, so they BLINK inside a pulsing diamond burst — the monochrome era's
+  // way of saying "look here".
   const spat = shardPat(envTier);
   const blinkOff = envTier === 0 && Math.floor(g.time * 3) % 2 === 1;
   for (const s of g.shards) {
     if (blinkOff) break;
     const sx = Math.round(s.x) - 4 - camX, sy = Math.round(s.y) - 4 - camY;
-    if (sx < -8 || sy < -8 || sx > SCR_W || sy > SCR_H) continue;
+    if (sx < -12 || sy < -12 || sx > SCR_W + 4 || sy > SCR_H + 4) continue;
     stampPat(sx, sy, spat);
+    if (envTier === 0) stampMask16(sx - 4, sy - 4, BURST);
     if (envTier >= 1) overrideInk(sx, sy, 8, 8, SHARD_INK);
+  }
+
+  // Berry bushes in fruit: dots overlay, cell ink flips to red.
+  g.world.berrySpots.forEach((b, i) => {
+    if (g.berryCd[i] > 0) return;
+    const bx = b.x * 8 - camX, by = b.y * 8 - camY;
+    if (bx < -8 || by < -8 || bx > SCR_W || by > SCR_H) return;
+    stampPat(bx, by, BERRY_DOTS);
+    if (envTier >= 1) overrideInk(bx, by, 8, 8, 10);
+  });
+
+  // Wand-swap stations: pedestal glyph shows the wand you'd swap TO.
+  for (const [st, owner] of [[P_STATION, g.player], [R_STATION, g.rival]] as const) {
+    const sx = Math.round(st.x) - 4 - camX, sy = Math.round(st.y) - 4 - camY;
+    if (sx < -12 || sy < -12 || sx > SCR_W || sy > SCR_H) continue;
+    const icePickup = owner.wand === 'fire';
+    stampPat(sx, sy + 3, PATTERNS[Tl.SHRINE]);
+    stampPat(sx, sy - 5, icePickup ? WAND_ICE : WAND_FIRE);
+    if (envTier >= 1) overrideInk(sx, sy - 5, 8, 8, icePickup ? 13 : 10);
   }
 
   // Low-tier bolts join the bitmap; high-tier bolts drawn after colorize.
@@ -182,7 +240,7 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
     const bx = Math.round(b.x) - 4 - camX, by = Math.round(b.y) - 4 - camY;
     if (bx < -8 || by < -8 || bx > SCR_W || by > SCR_H) continue;
     stampPat(bx, by, BOLT_PATS[Math.floor(g.time * 14) % 2]);
-    if (envTier >= 1) overrideInk(bx, by, 8, 8, BOLT_INK);
+    if (envTier >= 1) overrideInk(bx, by, 8, 8, b.kind === 'ice' ? 13 : BOLT_INK);
   }
 
   // Low-tier avatars into the bitmap (T1: attribute clash; T0: mono glyph)
@@ -197,7 +255,9 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
     if (e.tier === 2) { overdraw.push({ e, sx, sy: sy - entBob(e) }); continue; }
     stampMask16(sx, sy, wizMask(e.facing, e.tier === 0 ? 0 : entFrame(e)));
     if (envTier >= 1) {
-      if (e.tier === 0) {
+      if (frozen(e)) {
+        overrideInk(sx, sy, 16, 16, 13);   // solid ice-cyan
+      } else if (e.tier === 0) {
         overrideInk(sx, sy, 16, 16, 7);
       } else {
         // Two-colour Spectrum sprite: body cells first, head cells win the overlap.
@@ -247,7 +307,7 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
   for (const o of overdraw) {
     const [headInk, bodyInk] = o.e.rival ? RIVAL_INKS : PLAYER_INKS;
     drawMaskPixels(c, wizMask(o.e.facing, entFrame(o.e)), o.sx, o.sy,
-      r => SPECTRUM[r < 8 ? headInk : bodyInk]);
+      r => frozen(o.e) ? SPECTRUM[13] : SPECTRUM[r < 8 ? headInk : bodyInk]);
     if (o.e.channel > 0) drawChannelBar(c, o.e, o.sx, o.sy, SPECTRUM[headInk]);
   }
   // High-tier avatars: full colour intruders in your 8-bit world.
@@ -263,7 +323,7 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
   // High-tier bolts
   for (const b of g.bolts) {
     if (b.tier <= 2) continue;
-    drawBoltDirect(c, g, b.x - camX, b.y - camY, b.tier);
+    drawBoltDirect(c, g, b.x - camX, b.y - camY, b.tier, b.kind === 'ice');
   }
 
   drawFx(c, g, envTier, camX, camY);
@@ -360,6 +420,12 @@ function drawTileDirect(
       c.fillStyle = '#10141c';
       c.beginPath(); c.arc(x + 4, y + 4, 1.8, 0, Math.PI * 2); c.fill();
       break;
+    case Tl.BERRY:
+      c.fillStyle = th.tree2;
+      c.beginPath(); c.arc(x + 4, y + 4.5, 3, 0, Math.PI * 2); c.fill();
+      c.fillStyle = th.tree3;
+      c.beginPath(); c.arc(x + 3, y + 3.5, 1.6, 0, Math.PI * 2); c.fill();
+      break;
   }
 }
 
@@ -386,14 +452,16 @@ function drawShardDirect(c: CanvasRenderingContext2D, th: Theme, x: number, y: n
   c.globalAlpha = 1;
 }
 
-function drawBoltDirect(c: CanvasRenderingContext2D, g: Game, x: number, y: number, tier: number): void {
-  c.fillStyle = tier >= 5 ? '#aef4ff' : '#ffe860';
+function drawBoltDirect(
+  c: CanvasRenderingContext2D, g: Game, x: number, y: number, tier: number, ice: boolean,
+): void {
+  c.fillStyle = ice ? '#9ce8ff' : tier >= 5 ? '#ffd24a' : '#ffe860';
   c.beginPath(); c.arc(x, y, 2.4, 0, Math.PI * 2); c.fill();
   c.fillStyle = '#ffffff';
   c.fillRect(x - 1, y - 1, 2, 2);
   if (tier >= 4) {
     c.globalAlpha = 0.4;
-    c.fillStyle = tier >= 5 ? '#5cd0e8' : '#f0a840';
+    c.fillStyle = ice ? '#58b8e0' : '#f0a840';
     c.fillRect(x - 4 + Math.sin(g.time * 30) * 2, y - 1, 3, 2);
     c.globalAlpha = 1;
   }
@@ -419,6 +487,29 @@ function directRender(c: CanvasRenderingContext2D, g: Game, envTier: number): vo
     drawShardDirect(c, th, sx, sy, envTier, g.time);
   }
 
+  // Berries in fruit
+  g.world.berrySpots.forEach((b, i) => {
+    if (g.berryCd[i] > 0) return;
+    const bx = b.x * TILE - camX, by = b.y * TILE - camY;
+    if (bx < -8 || by < -8 || bx > SCR_W || by > SCR_H) return;
+    c.fillStyle = '#e03040';
+    c.fillRect(bx + 2, by + 2, 2, 2);
+    c.fillRect(bx + 5, by + 3, 2, 2);
+    c.fillRect(bx + 3, by + 5, 2, 2);
+    c.fillStyle = '#ffb0b8';
+    c.fillRect(bx + 2, by + 2, 1, 1);
+  });
+
+  // Wand-swap stations
+  for (const [st, owner] of [[P_STATION, g.player], [R_STATION, g.rival]] as const) {
+    const sx = Math.round(st.x) - 4 - camX, sy = Math.round(st.y) - 4 - camY;
+    if (sx < -14 || sy < -14 || sx > SCR_W || sy > SCR_H) continue;
+    const icePickup = owner.wand === 'fire';
+    c.fillStyle = th.stone;
+    c.fillRect(sx + 1, sy + 4, 6, 4);
+    drawPat(c, icePickup ? WAND_ICE : WAND_FIRE, sx, sy - 5, icePickup ? '#8ce0ff' : '#ff7040');
+  }
+
   for (const e of [g.player, g.rival]) {
     if (invisible(g, e)) continue;
     if (e.tier <= 2) {
@@ -439,7 +530,7 @@ function directRender(c: CanvasRenderingContext2D, g: Game, envTier: number): vo
       const qx = Math.floor(bx / 4) * 4, qy = Math.floor(by / 4) * 4;
       c.fillRect(qx - 2, qy - 2, 5, 5);
     } else {
-      drawBoltDirect(c, g, bx, by, b.tier);
+      drawBoltDirect(c, g, bx, by, b.tier, b.kind === 'ice');
     }
   }
 
@@ -509,6 +600,8 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
   drawText(c, `YOU T${p.tier} ${TIERS[p.tier].name}`, 2, SCR_H + 2, col.fg);
   drawText(c, '♥'.repeat(p.hp), 122, SCR_H + 2, col.hp);
   drawText(c, '◆'.repeat(p.shards), 140, SCR_H + 2, col.acc);
+  drawPat(c, p.wand === 'ice' ? WAND_ICE : WAND_FIRE, 156, SCR_H + 1,
+    p.wand === 'ice' ? '#8ce0ff' : '#ff7040');
   drawText(c, `KERNAGH T${r.tier} ${TIERS[r.tier].name}`, 2, SCR_H + 9, col.fg);
   drawText(c, '♥'.repeat(r.hp), 122, SCR_H + 9, col.hp);
   drawText(c, '◆'.repeat(r.shards), 140, SCR_H + 9, col.acc);
@@ -578,6 +671,39 @@ function renderLoading(c: CanvasRenderingContext2D, g: Game, time: number): void
     const w = Math.floor(((g.loadT - 1.2) / 1.8) * (CANVAS_W - 2 * B - 8));
     c.fillStyle = '#000000';
     c.fillRect(B + 4, CANVAS_H - B - 12, w, 4);
+  }
+}
+
+// Guide screen: alternates with the title every 6 seconds.
+function renderGuide(c: CanvasRenderingContext2D, time: number): void {
+  c.fillStyle = '#000000';
+  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  borderStripes(c, time);
+  drawText(c, 'HOW TO PLAY', Math.floor((CANVAS_W - textWidth('HOW TO PLAY', 2)) / 2), 14, SPECTRUM[15], 2);
+  const rows: [() => void, string, string][] = [
+    [() => drawPat(c, SHARD_TAPE, 40, 0, SPECTRUM[13], 2), 'GATHER 3 SHARDS', ''],
+    [() => { drawPat(c, PATTERNS[Tl.STONE], 36, 0, SPECTRUM[15], 2); drawPat(c, PATTERNS[Tl.ALTAR], 46, 0, SPECTRUM[13]); },
+      'CHANNEL AT THE STONE CIRCLE', 'TO UPGRADE'],
+    [() => { drawPat(c, PATTERNS[Tl.BERRY], 40, 0, SPECTRUM[12], 2); drawPat(c, BERRY_DOTS, 44, 4, SPECTRUM[10]); },
+      'BERRIES RESTORE ♥', ''],
+    [() => { drawPat(c, WAND_FIRE, 34, 0, SPECTRUM[10], 2); drawPat(c, WAND_ICE, 50, 0, SPECTRUM[13]); },
+      'SWAP WANDS AT YOUR VILLAGE', 'FIRE HARMS - ICE FREEZES'],
+    [() => drawMaskPixels(c, wizMask(0, 0), 40, 0, r => SPECTRUM[r < 8 ? RIVAL_INKS[0] : RIVAL_INKS[1]]),
+      'KERNAGH RACES YOU', 'DEFEAT OR AVOID HIM'],
+    [() => drawPat(c, PATTERNS[Tl.WATER], 40, 0, SPECTRUM[9], 2), 'CROSS THE RIVER', 'AT THE BRIDGES'],
+  ];
+  let y = 34;
+  for (const [icon, l1, l2] of rows) {
+    c.save();
+    c.translate(0, y);
+    icon();
+    c.restore();
+    drawText(c, l1, 76, y + (l2 ? 0 : 5), SPECTRUM[15]);
+    if (l2) drawText(c, l2, 76, y + 9, SPECTRUM[7]);
+    y += 21;
+  }
+  if (Math.floor(time * 2) % 2 === 0) {
+    drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER')) / 2), 170, SPECTRUM[14]);
   }
 }
 
@@ -681,14 +807,18 @@ function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: num
 
 // ---------- main entry ----------
 
-function renderPlay(c: CanvasRenderingContext2D, g: Game, envTier: number): void {
+export function renderPlay(c: CanvasRenderingContext2D, g: Game, envTier: number): void {
   if (envTier <= 2) attrRender(c, g, envTier);
   else directRender(c, g, envTier);
 }
 
 export function render(c: CanvasRenderingContext2D, g: Game, time: number): void {
   if (g.mode === 'loading') { renderLoading(c, g, time); return; }
-  if (g.mode === 'title') { renderTitle(c, time); return; }
+  if (g.mode === 'title') {
+    if (Math.floor(time / 6) % 2 === 1) renderGuide(c, time);
+    else renderTitle(c, time);
+    return;
+  }
   if (g.mode === 'win') { renderEnd(c, g, true, time); return; }
   if (g.mode === 'lose') { renderEnd(c, g, false, time); return; }
 

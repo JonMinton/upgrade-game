@@ -33,8 +33,16 @@ Arrows/WASD move, Space (or X) fires, Enter starts. Gather 3 shards, channel for
 or by **elimination** — derez Kernagh while he's already at rock-bottom T0. Get
 derezzed (3 hits) and you drop a tier, lose your shards, and respawn at the
 village; get derezzed at T0 and it's game over. Home screens (your village,
-Kernagh's keep) are combat-free. Shards regrow at shrines every ~22 s. The map
-is fixed across all games — learn it. A river splits the world in
+Kernagh's keep) are combat-free. Shards regrow at shrines every ~22 s. Berries
+heal; the pedestal in your village swaps between firewand (harms) and icewand
+(freezes). The map is fixed across all games — learn it.
+
+## Map editor
+
+`/editor.html` (same dev server) — paint tiles on any screen, preview it at any
+tier T0–T5 through the real renderers, check connectivity, and "apply to game"
+(stored in localStorage; reload the game tab to play it, "clear override" to
+go back to the built-in map). A river splits the world in
 half, bridged in only two places; hedgerows close many screen borders — watch
 the minimap (bottom right): green is home, cyan is the Standing Stones.
 
