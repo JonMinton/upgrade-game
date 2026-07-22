@@ -6,6 +6,7 @@ import {
   FREEZE_TIME, STAGGER_TIME,
 } from './defs';
 import { genWorld, worldFromTiles, moveEnt, solidPx, solidTile } from './map';
+import { ruleGenTiles } from './rulegen';
 import { updateRival } from './ai';
 import { sfx, setMusicTier, SfxName } from './audio';
 
@@ -25,20 +26,25 @@ function makeEnt(x: number, y: number, rival: boolean): Ent {
   };
 }
 
-export function newGame(difficulty: 'easy' | 'hard' = 'easy'): Game {
-  // The tile editor can stage an alternative map via localStorage.
+export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number | null = null): Game {
+  // Priority: chaos-mode roll > editor-staged map (localStorage) > default.
   let world: World;
-  let mapName = 'VALE';
-  try {
-    const o = localStorage.getItem('upgrade-map');
-    if (o) {
-      world = worldFromTiles(Uint8Array.from(JSON.parse(o) as number[]));
-      mapName = (localStorage.getItem('upgrade-map-name') || 'CUSTOM').toUpperCase().slice(0, 6);
-    } else {
+  let mapName = 'GLEN';
+  if (chaosSeed != null) {
+    world = worldFromTiles(ruleGenTiles(chaosSeed));
+    mapName = 'CHAOS';
+  } else {
+    try {
+      const o = localStorage.getItem('upgrade-map');
+      if (o) {
+        world = worldFromTiles(Uint8Array.from(JSON.parse(o) as number[]));
+        mapName = (localStorage.getItem('upgrade-map-name') || 'CUSTOM').toUpperCase().slice(0, 6);
+      } else {
+        world = genWorld();
+      }
+    } catch {
       world = genWorld();
     }
-  } catch {
-    world = genWorld();
   }
   const g: Game = {
     mode: 'loading', difficulty, loadT: 0, time: 0, world,
@@ -56,7 +62,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy'): Game {
     camX: 0, camY: SCR_H * 3,
     hinted3: false, endTime: 0, loseWhy: 'race', winWhy: 'transcend', winTier: WIN_TIER,
     maxTier: START_TIER, kills: 0, score: 0, scored: false, entryActive: false, entryName: '',
-    mapName,
+    mapName, chaosSeed, seedEntry: null,
   };
   // A modest starting scatter (4 shrines, spread across the map); the rest of
   // the economy comes from respawns, so neither racer can sprint the ladder.

@@ -16,7 +16,15 @@ const input: Input = { up: false, down: false, left: false, right: false, fire: 
 let enterPressed = false;
 let hardPressed = false;
 let spacePressed = false;
+let chaosPressed = false;
+let seedOpenPressed = false;
+let seedStart: number | null = null;
 let difficulty: 'easy' | 'hard' = 'easy';
+let chaosSeed: number | null = null;
+
+function unlocked(): boolean {
+  try { return localStorage.getItem('upgrade-hard-unlocked') === '1'; } catch { return false; }
+}
 
 const KEYMAP: Record<string, keyof Input> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -43,8 +51,23 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     return;
   }
+  // Title-screen seed entry (seeded chaos) captures digits.
+  if (g.mode === 'title' && g.seedEntry !== null) {
+    if (/^[0-9]$/.test(e.key) && g.seedEntry.length < 6) g.seedEntry += e.key;
+    else if (e.key === 'Backspace') g.seedEntry = g.seedEntry.slice(0, -1);
+    else if (e.key === 'Escape') g.seedEntry = null;
+    else if (e.key === 'Enter' && g.seedEntry.length > 0) {
+      seedStart = Math.max(1, parseInt(g.seedEntry, 10) || 1);
+      g.seedEntry = null;
+      initAudio();
+    }
+    e.preventDefault();
+    return;
+  }
   if (e.key === 'Enter') { enterPressed = true; initAudio(); e.preventDefault(); return; }
   if (e.key === 'h' || e.key === 'H') hardPressed = true;
+  if (e.key === 'c' || e.key === 'C') chaosPressed = true;
+  if ((e.key === 's' || e.key === 'S') && g.mode === 'title') seedOpenPressed = true;
   if (e.key === ' ') spacePressed = true;
   if ((e.key === 'm' || e.key === 'M') && g.mode === 'title') cycleMapFilter();
   const k = KEYMAP[e.key];
@@ -95,24 +118,47 @@ function frame(now: number): void {
     g.mode = 'play';
     setTitleMode(false);
     setMusicTier(g.player.tier);
-    msg(g, g.difficulty === 'hard'
-      ? 'HARD MODE - THE TRUE KERNAGH AWAKENS'
-      : 'FIND THE SHARDS. KERNAGH SEEKS THEM TOO', 4);
+    if (g.chaosSeed != null) {
+      msg(g, `CHAOS MODE - SEED ${g.chaosSeed} - AN UNCHARTED VALLEY`, 4);
+    } else {
+      msg(g, g.difficulty === 'hard'
+        ? 'HARD MODE - THE TRUE KERNAGH AWAKENS'
+        : 'FIND THE SHARDS. KERNAGH SEEKS THEM TOO', 4);
+    }
   };
 
   if (hardPressed) {
     hardPressed = false;
-    if (g.mode === 'title') {
+    if (g.mode === 'title' && unlocked()) {
       difficulty = 'hard';
       g.difficulty = 'hard';
       startPlay();
     }
   }
+  if (chaosPressed) {
+    chaosPressed = false;
+    if (g.mode === 'title') {
+      chaosSeed = 1 + Math.floor(Math.random() * 999999);
+      g = newGame(difficulty, chaosSeed);
+      startPlay();
+    }
+  }
+  if (seedOpenPressed) {
+    seedOpenPressed = false;
+    if (g.mode === 'title' && unlocked()) g.seedEntry = '';
+  }
+  if (seedStart != null && g.mode === 'title') {
+    chaosSeed = seedStart;
+    seedStart = null;
+    g = newGame(difficulty, chaosSeed);
+    startPlay();
+  }
   if (spacePressed) {
     spacePressed = false;
     if (g.mode === 'win' && g.difficulty === 'easy') {
-      // Rest on your laurels: back to the title.
+      // Rest on your laurels: back to the title (and back to the default map).
       difficulty = 'easy';
+      chaosSeed = null;
       g = newGame(difficulty);
       g.mode = 'title';
     }
@@ -124,12 +170,13 @@ function frame(now: number): void {
     } else if (g.mode === 'title') {
       startPlay();
     } else if (g.mode === 'win' && g.difficulty === 'easy') {
-      // The loop: victory in easy mode leads to the true Kernagh.
+      // The loop: victory in easy mode leads to the true Kernagh — on the
+      // same map, chaos or not.
       difficulty = 'hard';
-      g = newGame(difficulty);
+      g = newGame(difficulty, chaosSeed);
       startPlay();
     } else if (g.mode === 'win' || g.mode === 'lose') {
-      g = newGame(difficulty);
+      g = newGame(difficulty, chaosSeed);
       startPlay();
     }
   }

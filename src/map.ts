@@ -6,6 +6,7 @@
 import {
   SCR_TW, SCR_TH, TILE, WORLD_TW, WORLD_TH, Tl, SOLID, World, Vec,
 } from './defs';
+import { ruleGenTiles } from './rulegen';
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -100,6 +101,15 @@ export function poisReachable(w: World): boolean {
   return pois.every(p => reach[p.y * WORLD_TW + p.x]);
 }
 
+// The default map: rule-generated from a hand-picked seed whose qualities
+// echo the original hand-authored VALE (SW village, NE keep, full-width
+// mid-river, north stone circle). Deterministic — identical every game.
+export const DEFAULT_MAP_SEED = 72;
+
+export function genWorld(): World {
+  return worldFromTiles(ruleGenTiles(DEFAULT_MAP_SEED));
+}
+
 // Region per screen
 function region(sx: number, sy: number): string {
   if (sx === 0 && sy === 3) return 'village';
@@ -110,7 +120,7 @@ function region(sx: number, sy: number): string {
   return 'meadow';
 }
 
-export function genWorld(): World {
+export function genClassicWorld(): World {
   const rng = mulberry32(1337);
   const tiles = new Uint8Array(WORLD_TW * WORLD_TH).fill(Tl.GRASS);
   const set = (tx: number, ty: number, t: number) => {

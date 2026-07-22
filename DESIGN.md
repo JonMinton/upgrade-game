@@ -277,6 +277,26 @@ increasingly rich stereo samples as he pulls ahead.
 - Markers are paintable in the editor (p-base / r-base), so hand-made maps
   can place bases anywhere too.
 
+### Playtest round 9 (2026-07-22)
+
+- **New default map "GLEN":** the shipped map is now rule-generated from
+  hand-picked seed 72, chosen by scanning 80 seeds for the qualities of the
+  original hand-authored VALE (SW village, NE keep ~1360px apart, full-width
+  meandering mid-river with two natural bridges, 20 shrines, connected).
+  `genWorld()` = `ruleGenTiles(72)`; the old authored generator survives as
+  `genClassicWorld()` and `maps/vale.json` remains loadable as a classic.
+  Idle-easy pacing on GLEN: ~7.9 min.
+- **Chaos Mode:** C on the title screen rolls a random seed and starts on a
+  freshly generated map (announced as "CHAOS MODE - SEED N"). The seed stays
+  fixed through retries and the easy→hard loop, so the map is learnable
+  within a session; SPACE (rest) returns to the default map. Chaos scores
+  are tagged with map "CHAOS"; the seed also appears on end screens
+  ("SCORE 1250 - SEED 575679") so maps can be shared.
+- **Seeded chaos:** S on the title screen (unlocked, with hard mode, by the
+  first easy win) opens a digit-entry prompt — type a shared seed to play
+  that exact valley. Kept behind the unlock so the first-play experience
+  stays simple.
+
 ## Future work
 
 - **Server-backed Hall of Signals.** localStorage is per-browser; the plan:

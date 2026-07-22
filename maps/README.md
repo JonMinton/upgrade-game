@@ -6,7 +6,8 @@ Each map is a JSON file: `{ "name": "VALE", "tiles": [ ...16896 tile ids... ] }`
 (192×88 tiles, row-major; tile ids are the `Tl` enum in `src/defs.ts`).
 The `name` (max 6 chars) tags hi-score entries so scores compare like with like.
 
-- `vale.json` — the built-in map (exported from the generator, seed 1337).
+- `glen.json` — the current default map (rule-generated, seed 72).
+- `vale.json` — the original hand-authored map, loadable as a classic.
 
 ## Workflow
 

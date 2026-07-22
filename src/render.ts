@@ -753,10 +753,20 @@ function renderScoresScreen(c: CanvasRenderingContext2D, time: number): void {
 const CREDIT_YEARS = ['1979', '1982', '1986', '1987', '1990', '1995'];
 const CREDIT_ATTRS: [number, number][] = [[7, 0], [15, 1], [14, 2], [12, 0], [13, 3], [11, 0]];
 
-function renderTitle(c: CanvasRenderingContext2D, time: number): void {
+function renderTitle(c: CanvasRenderingContext2D, g: Game, time: number): void {
   c.fillStyle = '#000000';
   c.fillRect(0, 0, CANVAS_W, CANVAS_H);
   borderStripes(c, time);
+  if (g.seedEntry !== null) {
+    drawText(c, 'UPGRADE', Math.floor((CANVAS_W - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
+    drawText(c, 'SEEDED CHAOS - ENTER A SEED:',
+      Math.floor((CANVAS_W - textWidth('SEEDED CHAOS - ENTER A SEED:')) / 2), 84, SPECTRUM[13]);
+    const shown = g.seedEntry + (Math.floor(time * 3) % 2 === 0 && g.seedEntry.length < 6 ? '_' : '');
+    drawText(c, shown || '_', Math.floor((CANVAS_W - textWidth(shown || '_', 2)) / 2), 100, SPECTRUM[14], 2);
+    drawText(c, 'DIGITS THEN ENTER - ESC CANCELS',
+      Math.floor((CANVAS_W - textWidth('DIGITS THEN ENTER - ESC CANCELS')) / 2), 124, SPECTRUM[7]);
+    return;
+  }
   drawText(c, 'UPGRADE', Math.floor((CANVAS_W - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
   const lines: [string, string][] = [
     ['ARROWS MOVE - SPACE FIRE', SPECTRUM[15]],
@@ -768,10 +778,12 @@ function renderTitle(c: CanvasRenderingContext2D, time: number): void {
   if (Math.floor(time * 2) % 2 === 0) {
     drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER', 2)) / 2), 118, SPECTRUM[14], 2);
   }
+  drawText(c, 'C FOR CHAOS MODE', Math.floor((CANVAS_W - textWidth('C FOR CHAOS MODE')) / 2), 134, SPECTRUM[11]);
   let hardUnlocked = false;
   try { hardUnlocked = localStorage.getItem('upgrade-hard-unlocked') === '1'; } catch { /* private mode */ }
   if (hardUnlocked) {
-    drawText(c, 'H FOR HARD MODE', Math.floor((CANVAS_W - textWidth('H FOR HARD MODE')) / 2), 136, SPECTRUM[10]);
+    drawText(c, 'H FOR HARD - S FOR SEEDED CHAOS',
+      Math.floor((CANVAS_W - textWidth('H FOR HARD - S FOR SEEDED CHAOS')) / 2), 143, SPECTRUM[10]);
   }
   const step = Math.floor(time) % CREDIT_YEARS.length;
   const credit = `JON FABLETON (C) ${CREDIT_YEARS[step]}`;
@@ -788,7 +800,7 @@ function renderTitle(c: CanvasRenderingContext2D, time: number): void {
 function drawEndOptions(
   c: CanvasRenderingContext2D, g: Game, time: number, acc: string, fg: string, y: number,
 ): void {
-  const sc = `SCORE ${g.score}`;
+  const sc = `SCORE ${g.score}` + (g.chaosSeed != null ? ` - SEED ${g.chaosSeed}` : '');
   drawText(c, sc, Math.floor((CANVAS_W - textWidth(sc)) / 2), y - 12, acc);
   if (g.entryActive) {
     drawText(c, 'A NEW SIGNAL FOR THE HALL - YOUR NAME:',
@@ -891,7 +903,7 @@ export function render(c: CanvasRenderingContext2D, g: Game, time: number): void
     const phase = Math.floor(time / 6) % 3;
     if (phase === 1) renderGuide(c, time);
     else if (phase === 2) renderScoresScreen(c, time);
-    else renderTitle(c, time);
+    else renderTitle(c, g, time);
     return;
   }
   if (g.mode === 'win') { renderEnd(c, g, true, time); return; }

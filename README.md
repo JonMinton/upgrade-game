@@ -35,7 +35,10 @@ derezzed (3 hits) and you drop a tier, lose your shards, and respawn at the
 village; get derezzed at T0 and it's game over. Home screens (your village,
 Kernagh's keep) are combat-free. Shards regrow at shrines every ~22 s. Berries
 heal; the pedestal in your village swaps between firewand (harms) and icewand
-(freezes). The map is fixed across all games — learn it.
+(freezes). The default map ("GLEN") is fixed across all games — learn it. Press
+C on the title screen for **Chaos Mode**: a freshly generated valley every time
+(its seed is shown so you can share it); beating easy mode unlocks hard mode
+(H) and seeded chaos (S).
 
 ## Map editor
 
