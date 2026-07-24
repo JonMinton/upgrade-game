@@ -135,8 +135,35 @@ export function poisReachable(w: World): boolean {
 // mid-river, north stone circle). Deterministic — identical every game.
 export const DEFAULT_MAP_SEED = 6;
 
+// Hand-tuning on top of the rules: the grown tributary in the south-west ran
+// its whole length one tile west of the x=32 screen seam — from the
+// neighbouring screen the way west just "didn't work", with nothing visible
+// to say why — and it left only a 3-tile corridor along the southern edge.
+// Trim its southern fifth (the corridor becomes 8 tiles) and widen it two
+// tiles east so water shows on both sides of the seam.
+function tuneGlenTributary(T: Uint8Array): void {
+  const at = (x: number, y: number) => T[y * WORLD_TW + x];
+  const put = (x: number, y: number, t: number) => { T[y * WORLD_TW + x] = t; };
+  const open = (t: number) => t === Tl.GRASS || t === Tl.REED;
+  for (let y = 79; y <= 84; y++) {
+    for (let x = 27; x <= 33; x++) {
+      if (at(x, y) === Tl.WATER || at(x, y) === Tl.REED) put(x, y, Tl.GRASS);
+    }
+  }
+  for (let y = 59; y <= 78; y++) {
+    let right = -1;
+    for (let x = 28; x <= 33; x++) if (at(x, y) === Tl.WATER) right = x;
+    if (right < 0) continue;
+    for (let x = right + 1; x <= right + 2; x++) if (open(at(x, y))) put(x, y, Tl.WATER);
+    // reeds flag the new east bank to players approaching from the next screen
+    if (y % 3 === 0 && open(at(right + 3, y))) put(right + 3, y, Tl.REED);
+  }
+}
+
 export function genWorld(): World {
-  return worldFromTiles(ruleGenTiles(DEFAULT_MAP_SEED));
+  const tiles = ruleGenTiles(DEFAULT_MAP_SEED);
+  tuneGlenTributary(tiles);
+  return worldFromTiles(tiles);
 }
 
 // Region per screen
