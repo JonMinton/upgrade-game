@@ -176,7 +176,7 @@ function stepAt(absStep: number, t: number): void {
 
 export type SfxName =
   'step' | 'zap' | 'hit' | 'pickup' | 'derez' | 'upgrade' | 'ritual' | 'deny'
-  | 'spawn' | 'berry' | 'freeze' | 'wand';
+  | 'spawn' | 'berry' | 'freeze' | 'wand' | 'push' | 'pushdone';
 
 export function sfx(name: SfxName, tier: number, vol = 1, pan = 0): void {
   if (!ac || vol <= 0.01) return;
@@ -236,5 +236,20 @@ export function sfx(name: SfxName, tier: number, vol = 1, pan = 0): void {
       tone(780, 780, 0.09, w2, 0.1 * vol, pan, 0.06);
       break;
     }
+    case 'push':
+      // Stone grinding on earth: one effortful heave per burst.
+      if (tier <= 1) tone(75, 55, 0.12, 'square', 0.13 * vol, pan);
+      else { noise(0.14, 260, 'lowpass', 0.26 * vol, pan); tone(70, 55, 0.12, 'sawtooth', 0.06 * vol, pan); }
+      break;
+    case 'pushdone':
+      // The stone settles into the riverbed: deep thunk, then the splash.
+      tone(160, 45, 0.25, 'square', 0.2 * vol, pan);
+      if (tier >= 2) {
+        noise(0.35, 700, 'lowpass', 0.2 * vol, pan, 0.08);
+        noise(0.3, 4200, 'highpass', 0.07 * vol, pan, 0.14);
+      } else {
+        tone(900, 200, 0.3, 'square', 0.1 * vol, pan, 0.1);
+      }
+      break;
   }
 }

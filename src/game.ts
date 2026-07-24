@@ -3,10 +3,11 @@
 import {
   Game, Ent, Input, World, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, FINAL_CHANNEL_TIME,
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
-  FREEZE_TIME, STAGGER_TIME,
+  FREEZE_TIME, STAGGER_TIME, WORLD_TW, Tl, PUSH_CFG,
 } from './defs';
-import { genWorld, worldFromTiles, moveEnt, solidTile, blocksBolt } from './map';
+import { glenTiles, worldFromTiles, moveEnt, solidTile, blocksBolt, tileAt, pushSlide } from './map';
 import { ruleGenTiles } from './rulegen';
+import { evolveTiles, placePushstone, visitCount, rngFor } from './evolve';
 import { updateRival } from './ai';
 import { sfx, setMusicTier, SfxName } from './audio';
 
@@ -28,22 +29,33 @@ function makeEnt(x: number, y: number, rival: boolean): Ent {
 
 export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number | null = null): Game {
   // Priority: chaos-mode roll > editor-staged map (localStorage) > default.
+  // Named maps age between games (one CA generation per completed visit);
+  // GLEN and chaos maps may also be offered a pushstone. Editor maps keep
+  // their painted stones verbatim — hand-authored intent wins.
   let world: World;
   let mapName = 'GLEN';
   if (chaosSeed != null) {
-    world = worldFromTiles(ruleGenTiles(chaosSeed));
+    const t = ruleGenTiles(chaosSeed);
+    placePushstone(t, rngFor('PUSH:CHAOS', chaosSeed));
+    world = worldFromTiles(t);
     mapName = 'CHAOS';
   } else {
     try {
       const o = localStorage.getItem('upgrade-map');
       if (o) {
-        world = worldFromTiles(Uint8Array.from(JSON.parse(o) as number[]));
+        const t = Uint8Array.from(JSON.parse(o) as number[]);
         mapName = (localStorage.getItem('upgrade-map-name') || 'CUSTOM').toUpperCase().slice(0, 6);
+        for (let i = 1; i <= visitCount(mapName); i++) evolveTiles(t, mapName, i);
+        world = worldFromTiles(t);
       } else {
-        world = genWorld();
+        const t = glenTiles();
+        const n = visitCount('GLEN');
+        for (let i = 1; i <= n; i++) evolveTiles(t, 'GLEN', i);
+        placePushstone(t, rngFor('PUSH:GLEN', n));
+        world = worldFromTiles(t);
       }
     } catch {
-      world = genWorld();
+      world = worldFromTiles(glenTiles());
     }
   }
   const g: Game = {
@@ -54,6 +66,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number 
     berryCd: world.berrySpots.map(() => 0),
     respawn: RESPAWN_EVERY,
     msg: '', msgUntil: 0,
+    push: null,
     ripple: -1, rippleFrom: START_TIER,
     ai: {
       state: 'forage', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
@@ -288,6 +301,42 @@ export function update(g: Game, inp: Input, dt: number): void {
   } else if (stD > 16) {
     p.onStation = false;
   }
+
+  // --- Pushstone: sustained, square-on shoving shifts the marked stone into
+  // the river, fording it — permanently, for this game, for both wizards.
+  // Only a direction that actually reaches water accumulates; anything else
+  // is just leaning on a rock. Any interruption (release, diagonal, stun)
+  // resets progress: the hold time IS the cost.
+  let pushing = false;
+  {
+    const pdx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    const pdy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+    if (p.stun <= 0 && (pdx === 0) !== (pdy === 0)) {
+      const ptx = Math.floor(p.x / TILE) + pdx, pty = Math.floor(p.y / TILE) + pdy;
+      if (tileAt(g.world, ptx, pty) === Tl.PUSH && pushSlide(g.world, ptx, pty, pdx, pdy)) {
+        pushing = true;
+        if (!g.push || g.push.tx !== ptx || g.push.ty !== pty || g.push.dx !== pdx || g.push.dy !== pdy) {
+          g.push = { tx: ptx, ty: pty, dx: pdx, dy: pdy, t: 0 };
+        }
+        const before = g.push.t;
+        g.push.t += dt;
+        // Grind in effortful bursts rather than a continuous drone.
+        if (Math.floor(before / 0.45) !== Math.floor(g.push.t / 0.45)) sfx('push', p.tier);
+        if (g.push.t >= PUSH_CFG.holdSecs) {
+          const slide = pushSlide(g.world, ptx, pty, pdx, pdy)!;
+          const T = g.world.tiles;
+          T[pty * WORLD_TW + ptx] = Tl.DIRT;   // the bare socket the stone left
+          for (const cv of slide.carve) T[cv.y * WORLD_TW + cv.x] = Tl.PATH;
+          const splash = slide.carve[0];
+          g.fx.push({ x: splash.x * TILE + 4, y: splash.y * TILE + 4, t0: g.time, kind: 0 });
+          sfx('pushdone', p.tier);
+          msg(g, 'THE STONE SETTLES - A NEW FORD', 4);
+          g.push = null;
+        }
+      }
+    }
+  }
+  if (!pushing) g.push = null;
 
   // --- Rival
   updateRival(g, dt, (bx, by) => {

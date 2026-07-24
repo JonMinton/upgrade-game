@@ -20,7 +20,7 @@ const TILE_NAMES: [number, string, string][] = [
   [Tl.SHRINE, 'shrine', '#e8d040'], [Tl.WELL, 'well', '#b8b8c8'], [Tl.HUT, 'hut', '#c05838'],
   [Tl.BERRY, 'berry', '#d04058'],
   [Tl.PBASE, 'p-base', '#40e0e8'], [Tl.RBASE, 'r-base', '#f06078'],
-  [Tl.RUIN, 'ruin', '#77766e'],
+  [Tl.RUIN, 'ruin', '#77766e'], [Tl.PUSH, 'push', '#3e9a94'],
 ];
 
 // Point features never take a wide brush; area tiles do.
@@ -70,7 +70,7 @@ const fake: Game = {
   mode: 'play', difficulty: 'hard', loadT: 0, time: 0, world,
   player: offEnt(), rival: { ...offEnt(), rival: true },
   bolts: [], shards: [], fx: [], berryCd: [],
-  respawn: 99, msg: '', msgUntil: 0, ripple: -1, rippleFrom: 1,
+  respawn: 99, msg: '', msgUntil: 0, push: null, ripple: -1, rippleFrom: 1,
   ai: {
     state: '', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
     targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0, nearT: 0,

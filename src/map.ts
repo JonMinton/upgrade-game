@@ -4,11 +4,11 @@
 // through worldFromTiles(), which derives shrines/berries/altar by scanning.
 
 import {
-  SCR_TW, SCR_TH, TILE, WORLD_TW, WORLD_TH, Tl, SOLID, World, Vec,
+  SCR_TW, SCR_TH, TILE, WORLD_TW, WORLD_TH, Tl, SOLID, World, Vec, PUSH_CFG,
 } from './defs';
 import { ruleGenTiles } from './rulegen';
 
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a |= 0; a = (a + 0x6d2b79f5) | 0;
@@ -37,10 +37,47 @@ export function blocksBolt(w: World, x: number, y: number): boolean {
   return SOLID.has(t) && t !== Tl.WATER;
 }
 
+// A pushstone only budges along a straight line into water. The push is valid
+// when at most maxSlide clear tiles separate stone from water, the water run
+// it meets is fordable (≤ maxSpan tiles to a walkable far bank). Returns the
+// water tiles to carve into causeway — widened to two abreast when the
+// parallel column is also water, so the ford walks like the built bridges —
+// or null when this direction goes nowhere useful.
+export function pushSlideTiles(
+  tiles: Uint8Array, tx: number, ty: number, dx: number, dy: number,
+): { carve: Vec[] } | null {
+  const at = (x: number, y: number): number =>
+    (x < 0 || y < 0 || x >= WORLD_TW || y >= WORLD_TH) ? Tl.TREE : tiles[y * WORLD_TW + x];
+  const clear = (t: number): boolean => t === Tl.GRASS || t === Tl.PATH || t === Tl.DIRT;
+  let x = tx + dx, y = ty + dy;
+  for (let slid = 0; slid < PUSH_CFG.maxSlide && clear(at(x, y)); slid++) { x += dx; y += dy; }
+  if (at(x, y) !== Tl.WATER) return null;
+  const run: Vec[] = [];
+  while (at(x, y) === Tl.WATER && run.length <= PUSH_CFG.maxSpan) {
+    run.push({ x, y }); x += dx; y += dy;
+  }
+  if (run.length > PUSH_CFG.maxSpan) return null;
+  if (SOLID.has(at(x, y))) return null;   // far bank must be walkable
+  const px = dy !== 0 ? 1 : 0, py = dx !== 0 ? 1 : 0;   // perpendicular axis
+  for (const side of [1, -1]) {
+    if (run.every(c => at(c.x + px * side, c.y + py * side) === Tl.WATER)
+      && !SOLID.has(at(x + px * side, y + py * side))) {
+      return { carve: [...run, ...run.map(c => ({ x: c.x + px * side, y: c.y + py * side }))] };
+    }
+  }
+  return { carve: run };
+}
+
+export function pushSlide(
+  w: World, tx: number, ty: number, dx: number, dy: number,
+): { carve: Vec[] } | null {
+  return pushSlideTiles(w.tiles, tx, ty, dx, dy);
+}
+
 const P_HOME_TX = 14, P_HOME_TY = 3 * SCR_TH + 12;
 const R_HOME_TX = 5 * SCR_TW + 16, R_HOME_TY = 3 * SCR_TH + 14;
 
-function floodFrom(tiles: Uint8Array, tx: number, ty: number): Uint8Array {
+export function floodFrom(tiles: Uint8Array, tx: number, ty: number): Uint8Array {
   const reach = new Uint8Array(WORLD_TW * WORLD_TH);
   const q = [ty * WORLD_TW + tx];
   reach[q[0]] = 1;
@@ -160,10 +197,15 @@ function tuneGlenTributary(T: Uint8Array): void {
   }
 }
 
-export function genWorld(): World {
+// GLEN's raw tiles, pre-evolution: the canonical launch valley.
+export function glenTiles(): Uint8Array {
   const tiles = ruleGenTiles(DEFAULT_MAP_SEED);
   tuneGlenTributary(tiles);
-  return worldFromTiles(tiles);
+  return tiles;
+}
+
+export function genWorld(): World {
+  return worldFromTiles(glenTiles());
 }
 
 // Region per screen

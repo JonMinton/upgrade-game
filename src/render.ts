@@ -7,7 +7,7 @@
 import {
   Game, Ent, SCR_W, SCR_H, SCR_TW, SCR_TH, CANVAS_W, CANVAS_H, TILE, Tl, TIERS,
   SPECTRUM, C64, TILE_ATTR, THEME, Theme, PLAYER_BANDS, RIVAL_BANDS, Bands,
-  PLAYER_INKS, RIVAL_INKS, BOLT_INK, SHARD_INK, CHANNEL_TIME, clamp, screenOf,
+  PLAYER_INKS, RIVAL_INKS, BOLT_INK, SHARD_INK, CHANNEL_TIME, PUSH_CFG, clamp, screenOf,
 } from './defs';
 import { tileAt } from './map';
 import {
@@ -441,6 +441,20 @@ function drawTileDirect(
       c.beginPath(); c.arc(x + 4, y + 4, 3, 0, Math.PI * 2); c.stroke();
       c.globalAlpha = 1;
       break;
+    case Tl.PUSH: {
+      // The pushstone: a faceted boulder in a colour no other stone wears.
+      if (tier >= 4) {
+        c.fillStyle = 'rgba(0,0,0,0.25)';
+        c.beginPath(); c.ellipse(x + 4, y + 7, 3.4, 1.1, 0, 0, Math.PI * 2); c.fill();
+      }
+      c.fillStyle = tier === 3 ? C64.cyan : '#3e9a94';
+      c.beginPath(); c.ellipse(x + 4, y + 4, 3.6, 3.2, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = tier === 3 ? C64.white : '#8fe0d8';
+      c.fillRect(x + 2, y + 2, 2, 1);
+      c.fillStyle = tier === 3 ? C64.blue : '#1e5a58';
+      c.fillRect(x + 3, y + 5, 3, 1);   // the score-line across the facet
+      break;
+    }
     case Tl.RUIN: {
       // Broken masonry: irregular courses with missing chunks.
       c.fillStyle = th.wallDark;
@@ -992,6 +1006,16 @@ export function render(c: CanvasRenderingContext2D, g: Game, time: number): void
     c.globalAlpha = 1;
   } else {
     renderPlay(c, g, g.player.tier);
+  }
+  // Pushstone progress: same idiom as the channel bar, drawn over either
+  // pipeline above the player's head.
+  if (g.push) {
+    const sx = Math.round(g.player.x - g.camX) - 8, sy = Math.round(g.player.y - g.camY) - 10;
+    const fill = Math.floor(clamp(g.push.t / PUSH_CFG.holdSecs, 0, 1) * 16);
+    c.fillStyle = '#000000';
+    c.fillRect(sx, sy - 5, 16, 3);
+    c.fillStyle = g.player.tier <= 2 ? SPECTRUM[11] : '#8fe0d8';
+    c.fillRect(sx + 1, sy - 4, Math.max(1, fill - 2), 1);
   }
   drawHUD(c, g);
 }

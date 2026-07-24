@@ -20,9 +20,17 @@ export const Tl = {
   // wizard's base is (spawn + safe screen + wand station nearby).
   PBASE: 14, RBASE: 15,
   RUIN: 16,   // crumbled masonry: solid, but grown in broken runs
+  PUSH: 17,   // pushstone: shoved into a river (sustained push), it fords it
 } as const;
 
-export const SOLID = new Set<number>([Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT, Tl.RUIN]);
+export const SOLID = new Set<number>([Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT, Tl.RUIN, Tl.PUSH]);
+
+// Pushstone tuning — mutable at runtime (window.__push) for playtesting.
+export const PUSH_CFG = {
+  holdSecs: 4,    // sustained push required before the stone gives
+  maxSlide: 4,    // clear tiles the stone may roll before reaching water
+  maxSpan: 5,     // widest water run a single stone can ford
+};
 
 export const START_TIER = 1;
 export const WIN_TIER = 5;
@@ -65,6 +73,7 @@ TILE_ATTR[Tl.DIRT] = [0, 0];   // bare earth: pure void at Spectrum tiers
 TILE_ATTR[Tl.PBASE] = [13, 0];
 TILE_ATTR[Tl.RBASE] = [11, 0];
 TILE_ATTR[Tl.RUIN] = [7, 0];
+TILE_ATTR[Tl.PUSH] = [11, 0];   // bright magenta: the one stone that isn't stone-coloured
 
 // C64 palette (Pepto's measured VIC-II values). The VIC-II fixed the chroma
 // amplitude in hardware, so nothing on a C64 was ever fully saturated —
@@ -202,6 +211,8 @@ export interface Game {
   seedEntry: string | null;   // title-screen seed input in progress (null = closed)
   escArmUntil: number;        // in-play quit confirm: ESC again before this g.time exits
   cheatMsgUntil?: number;     // title flashes the unlock-all confirmation until this wall-clock time
+  // Player's in-progress pushstone shove (null when not pushing).
+  push: { tx: number; ty: number; dx: number; dy: number; t: number } | null;
 }
 
 export interface Input { up: boolean; down: boolean; left: boolean; right: boolean; fire: boolean }

@@ -1,10 +1,11 @@
 // UPGRADE — entry point: input, loop, mode transitions.
 
-import { Game, Input, CANVAS_W, CANVAS_H } from './defs';
+import { Game, Input, CANVAS_W, CANVAS_H, PUSH_CFG } from './defs';
 import { newGame, update, msg, finalScore } from './game';
 import { render } from './render';
 import { initAudio, setTitleMode, setMusicTier } from './audio';
 import { qualifies, addScore, cycleMapFilter } from './hiscores';
+import { bumpVisit, visitCount, EVO_RATES } from './evolve';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 canvas.width = CANVAS_W;
@@ -128,6 +129,16 @@ let lastFrameAt = performance.now();
   const idle: Input = { up: false, down: false, left: false, right: false, fire: false };
   for (let t = 0; t < seconds && g.mode === 'play'; t += 0.05) update(g, idle, 0.05);
 };
+// Pushstone tuning knobs, live-editable while playtesting.
+(window as unknown as { __push: typeof PUSH_CFG }).__push = PUSH_CFG;
+// Valley-evolution handles: read/set a map's visit count, tweak CA rates.
+(window as unknown as { __evo: object }).__evo = {
+  visits: (m = 'GLEN') => visitCount(m),
+  set: (n: number, m = 'GLEN') => {
+    try { localStorage.setItem('upgrade-evo-' + m, String(n)); } catch { /* private mode */ }
+  },
+  rates: EVO_RATES,
+};
 // Average ms of CPU draw time per frame at a given env tier (render only, no update).
 (window as unknown as { __bench: (tier: number, frames?: number) => number }).__bench =
   (tier: number, frames = 120) => {
@@ -162,6 +173,8 @@ function frame(now: number): void {
   // Finalise the score once per game and open initials entry if it ranks.
   if ((g.mode === 'win' || g.mode === 'lose') && !g.scored) {
     g.scored = true;
+    // A finished game ages its map by one generation (chaos maps don't age).
+    if (g.chaosSeed == null) bumpVisit(g.mapName);
     g.score = finalScore(g);
     if (qualifies(g.score)) {
       g.entryActive = true;
