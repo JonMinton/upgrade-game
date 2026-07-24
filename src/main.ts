@@ -22,10 +22,27 @@ let seedOpenPressed = false;
 let seedStart: number | null = null;
 let difficulty: 'easy' | 'hard' = 'easy';
 let chaosSeed: number | null = null;
+let cheatBuf = '';   // rolling tail of letters typed on the title (cheat detection)
 
 function unlocked(): boolean {
   try { return localStorage.getItem('upgrade-hard-unlocked') === '1'; } catch { return false; }
 }
+
+function crtUnlocked(): boolean {
+  try { return localStorage.getItem('upgrade-crt-unlocked') === '1'; } catch { return false; }
+}
+
+function setCrt(on: boolean): void {
+  document.body.classList.toggle('crt', on);
+  try { localStorage.setItem('upgrade-crt-on', on ? '1' : '0'); } catch { /* private mode */ }
+}
+
+// Restore the CRT preference across reloads (only meaningful once unlocked).
+try {
+  if (crtUnlocked() && localStorage.getItem('upgrade-crt-on') === '1') {
+    document.body.classList.add('crt');
+  }
+} catch { /* private mode */ }
 
 const KEYMAP: Record<string, keyof Input> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -67,11 +84,30 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     return;
   }
+  // Title-screen cheat: type FABLETON then Enter to unlock everything.
+  // (No letter of it collides with the C/H/S/M/D hotkeys.)
+  if (g.mode === 'title') {
+    if (/^[a-z]$/i.test(e.key)) cheatBuf = (cheatBuf + e.key.toLowerCase()).slice(-8);
+    if (e.key === 'Enter' && cheatBuf === 'fableton') {
+      cheatBuf = '';
+      try {
+        localStorage.setItem('upgrade-hard-unlocked', '1');
+        localStorage.setItem('upgrade-crt-unlocked', '1');
+      } catch { /* private mode */ }
+      g.cheatMsgUntil = performance.now() / 1000 + 4;
+      e.preventDefault();
+      return;
+    }
+  }
   if (e.key === 'Enter') { enterPressed = true; initAudio(); e.preventDefault(); return; }
   if (e.key === 'Escape') escPressed = true;
   if (e.key === 'h' || e.key === 'H') hardPressed = true;
   if (e.key === 'c' || e.key === 'C') chaosPressed = true;
   if ((e.key === 's' || e.key === 'S') && g.mode === 'title') seedOpenPressed = true;
+  // D toggles the CRT overlay — outside play only, where D is WASD-right.
+  if ((e.key === 'd' || e.key === 'D') && g.mode !== 'play' && crtUnlocked()) {
+    setCrt(!document.body.classList.contains('crt'));
+  }
   if (e.key === ' ') spacePressed = true;
   if ((e.key === 'm' || e.key === 'M') && g.mode === 'title') cycleMapFilter();
   const k = KEYMAP[e.key];
@@ -92,6 +128,17 @@ let lastFrameAt = performance.now();
   const idle: Input = { up: false, down: false, left: false, right: false, fire: false };
   for (let t = 0; t < seconds && g.mode === 'play'; t += 0.05) update(g, idle, 0.05);
 };
+// Average ms of CPU draw time per frame at a given env tier (render only, no update).
+(window as unknown as { __bench: (tier: number, frames?: number) => number }).__bench =
+  (tier: number, frames = 120) => {
+    const keep = g.player.tier;
+    g.player.tier = tier;
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) render(ctx, g, t0 / 1000 + i / 60);
+    const ms = (performance.now() - t0) / frames;
+    g.player.tier = keep;
+    return ms;
+  };
 
 function frame(now: number): void {
   lastFrameAt = now;
@@ -106,6 +153,10 @@ function frame(now: number): void {
   // Winning easy mode unlocks the hard-mode shortcut permanently.
   if (g.mode === 'win' && g.difficulty === 'easy') {
     try { localStorage.setItem('upgrade-hard-unlocked', '1'); } catch { /* private mode */ }
+  }
+  // Winning hard mode (seeded or not) unlocks the CRT overlay permanently.
+  if (g.mode === 'win' && g.difficulty === 'hard') {
+    try { localStorage.setItem('upgrade-crt-unlocked', '1'); } catch { /* private mode */ }
   }
 
   // Finalise the score once per game and open initials entry if it ranks.

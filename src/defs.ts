@@ -201,6 +201,7 @@ export interface Game {
   chaosSeed: number | null;   // set when playing a procedurally-rolled map
   seedEntry: string | null;   // title-screen seed input in progress (null = closed)
   escArmUntil: number;        // in-play quit confirm: ESC again before this g.time exits
+  cheatMsgUntil?: number;     // title flashes the unlock-all confirmation until this wall-clock time
 }
 
 export interface Input { up: boolean; down: boolean; left: boolean; right: boolean; fire: boolean }

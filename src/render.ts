@@ -800,10 +800,17 @@ function renderTitle(c: CanvasRenderingContext2D, g: Game, time: number): void {
   lines.forEach(([s, colr], i) => {
     drawText(c, s, Math.floor((CANVAS_W - textWidth(s)) / 2), 80 + i * 12, colr);
   });
+  if (time < (g.cheatMsgUntil ?? 0)) {
+    drawText(c, 'ALL SIGNALS UNLOCKED',
+      Math.floor((CANVAS_W - textWidth('ALL SIGNALS UNLOCKED')) / 2), 106, SPECTRUM[Math.floor(time * 6) % 2 ? 13 : 14]);
+  }
   if (Math.floor(time * 2) % 2 === 0) {
     drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER', 2)) / 2), 118, SPECTRUM[14], 2);
   }
-  drawText(c, 'C FOR CHAOS MODE', Math.floor((CANVAS_W - textWidth('C FOR CHAOS MODE')) / 2), 134, SPECTRUM[11]);
+  let crtUnlocked = false;
+  try { crtUnlocked = localStorage.getItem('upgrade-crt-unlocked') === '1'; } catch { /* private mode */ }
+  const chaosLine = 'C FOR CHAOS MODE' + (crtUnlocked ? ' - D FOR CRT' : '');
+  drawText(c, chaosLine, Math.floor((CANVAS_W - textWidth(chaosLine)) / 2), 134, SPECTRUM[11]);
   let hardUnlocked = false;
   try { hardUnlocked = localStorage.getItem('upgrade-hard-unlocked') === '1'; } catch { /* private mode */ }
   if (hardUnlocked) {
@@ -847,6 +854,28 @@ function drawEndOptions(
       Math.floor((CANVAS_W - textWidth('SPACE - REST ON YOUR LAURELS')) / 2), y + 26, fg);
     drawText(c, 'ESC - TITLE SCREEN',
       Math.floor((CANVAS_W - textWidth('ESC - TITLE SCREEN')) / 2), y + 38, fg);
+  } else if (g.mode === 'win' && g.difficulty === 'hard') {
+    // The hard-mode reward: full transcendence earns the epigraph, a partial
+    // (elimination) win just the unlock line. Either way the flag is set.
+    let yy = y;
+    if (g.winWhy !== 'elimination') {
+      drawText(c, 'YOU HAVE ASCENDED IN HARD MODE',
+        Math.floor((CANVAS_W - textWidth('YOU HAVE ASCENDED IN HARD MODE')) / 2), yy, fg);
+      yy += 10;
+      drawText(c, 'THE ONLY WAY UP IS BACK DOWN',
+        Math.floor((CANVAS_W - textWidth('THE ONLY WAY UP IS BACK DOWN')) / 2), yy, fg);
+      yy += 10;
+    }
+    drawText(c, '(CRT MODE UNLOCKED - PRESS D)',
+      Math.floor((CANVAS_W - textWidth('(CRT MODE UNLOCKED - PRESS D)')) / 2), yy, acc);
+    yy += 12;
+    if (Math.floor(time * 2) % 2 === 0) {
+      drawText(c, 'ENTER TO PLAY AGAIN',
+        Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), yy, acc);
+    }
+    yy += 12;
+    drawText(c, 'ESC - TITLE SCREEN',
+      Math.floor((CANVAS_W - textWidth('ESC - TITLE SCREEN')) / 2), yy, fg);
   } else {
     if (Math.floor(time * 2) % 2 === 0) {
       drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), y + 8, acc);
