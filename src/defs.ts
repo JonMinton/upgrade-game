@@ -30,7 +30,7 @@ export const TIERS = [
   { name: '1979 MONO', quant: 8 },
   { name: 'SPECTRUM 48K', quant: 4 },
   { name: 'SPECTRUM 128', quant: 2 },
-  { name: '8-BIT SPRITES', quant: 1 },
+  { name: 'C64', quant: 1 },
   { name: '16-BIT ST', quant: 1 },
   { name: 'AMIGA', quant: 1 },
 ];
@@ -66,6 +66,16 @@ TILE_ATTR[Tl.PBASE] = [13, 0];
 TILE_ATTR[Tl.RBASE] = [11, 0];
 TILE_ATTR[Tl.RUIN] = [7, 0];
 
+// C64 palette (Pepto's measured VIC-II values). The VIC-II fixed the chroma
+// amplitude in hardware, so nothing on a C64 was ever fully saturated —
+// T3 must draw from these 16 colours and nothing else.
+export const C64 = {
+  black: '#000000', white: '#ffffff', red: '#68372b', cyan: '#70a4b2',
+  purple: '#6f3d86', green: '#588d43', blue: '#352879', yellow: '#b8c76f',
+  orange: '#6f4f25', brown: '#433900', lightRed: '#9a6759', darkGrey: '#444444',
+  grey: '#6c6c6c', lightGreen: '#9ad284', lightBlue: '#6c5eb5', lightGrey: '#959595',
+} as const;
+
 // Direct-render colour themes for tiers 3..5
 export interface Theme {
   grass: string; grass2: string; path: string; path2: string;
@@ -78,14 +88,17 @@ export interface Theme {
 }
 
 export const THEME: Record<number, Theme> = {
+  // T3 is built strictly from the C64 palette. Trees shade with dark
+  // olive-brown against mossy green (the Last Ninja trick — the VIC-II
+  // had no dark green). HUD is the boot-screen combo: light blue on blue.
   3: {
-    grass: '#4f9b3a', grass2: '#448a31', path: '#c2a25a', path2: '#ae9050',
-    trunk: '#8a5a2b', tree1: '#2c631f', tree2: '#3d7d2a', tree3: '#3d7d2a',
-    water: '#3552a4', water2: '#7d9ce0', water3: '#7d9ce0', reed: '#8fc25e',
-    wall: '#9a9a9a', wallDark: '#6e6e6e', hut: '#a8623a', hutDark: '#7c4326',
-    rock: '#7d7d7d', rockHi: '#a5a5a5', stone: '#b5b5b5', stoneHi: '#dcdcdc',
-    altarPad: '#26262e', altarGlow: '#66d9e8', shrineGlow: '#f0d040',
-    hudBg: '#101018', hudFg: '#e8e8e8', hudAccent: '#f0d040',
+    grass: C64.green, grass2: C64.brown, path: C64.yellow, path2: C64.orange,
+    trunk: C64.orange, tree1: C64.brown, tree2: C64.green, tree3: C64.lightGreen,
+    water: C64.blue, water2: C64.lightBlue, water3: C64.cyan, reed: C64.lightGreen,
+    wall: C64.lightGrey, wallDark: C64.grey, hut: C64.lightRed, hutDark: C64.red,
+    rock: C64.grey, rockHi: C64.lightGrey, stone: C64.lightGrey, stoneHi: C64.white,
+    altarPad: C64.darkGrey, altarGlow: C64.cyan, shrineGlow: C64.yellow,
+    hudBg: C64.blue, hudFg: C64.lightBlue, hudAccent: C64.yellow,
   },
   4: {
     grass: '#4da03e', grass2: '#3f8c33', path: '#d0ac60', path2: '#b8964e',

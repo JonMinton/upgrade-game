@@ -250,7 +250,7 @@ function ritual(g: Game, e: Ent, dt: number): void {
 }
 
 function tierName(t: number): string {
-  return ['1979 MONO', 'SPECTRUM 48K', 'SPECTRUM 128', '8-BIT SPRITES', '16-BIT ST', 'AMIGA'][t];
+  return ['1979 MONO', 'SPECTRUM 48K', 'SPECTRUM 128', 'C64', '16-BIT ST', 'AMIGA'][t];
 }
 
 export function update(g: Game, inp: Input, dt: number): void {

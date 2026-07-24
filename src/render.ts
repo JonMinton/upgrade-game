@@ -6,7 +6,7 @@
 
 import {
   Game, Ent, SCR_W, SCR_H, SCR_TW, SCR_TH, CANVAS_W, CANVAS_H, TILE, Tl, TIERS,
-  SPECTRUM, TILE_ATTR, THEME, Theme, PLAYER_BANDS, RIVAL_BANDS, Bands,
+  SPECTRUM, C64, TILE_ATTR, THEME, Theme, PLAYER_BANDS, RIVAL_BANDS, Bands,
   PLAYER_INKS, RIVAL_INKS, BOLT_INK, SHARD_INK, CHANNEL_TIME, clamp, screenOf,
 } from './defs';
 import { tileAt } from './map';
@@ -417,7 +417,7 @@ function drawTileDirect(
     case Tl.WELL:
       c.fillStyle = th.stone;
       c.beginPath(); c.arc(x + 4, y + 4, 3.6, 0, Math.PI * 2); c.fill();
-      c.fillStyle = '#10141c';
+      c.fillStyle = tier === 3 ? C64.black : '#10141c';
       c.beginPath(); c.arc(x + 4, y + 4, 1.8, 0, Math.PI * 2); c.fill();
       break;
     case Tl.BERRY:
@@ -427,7 +427,7 @@ function drawTileDirect(
       c.beginPath(); c.arc(x + 3, y + 3.5, 1.6, 0, Math.PI * 2); c.fill();
       break;
     case Tl.DIRT:
-      c.fillStyle = tier >= 5 ? '#66522f' : tier >= 4 ? '#5f4c31' : '#57452e';
+      c.fillStyle = tier >= 5 ? '#66522f' : tier >= 4 ? '#5f4c31' : C64.orange;
       c.fillRect(x, y, 8, 8);
       if ((wtx * 11 + wty * 7) % 4 === 0) {
         c.fillStyle = 'rgba(0,0,0,0.2)';
@@ -436,7 +436,7 @@ function drawTileDirect(
       break;
     case Tl.PBASE:
     case Tl.RBASE:
-      c.strokeStyle = t === Tl.PBASE ? th.altarGlow : '#f06078';
+      c.strokeStyle = t === Tl.PBASE ? th.altarGlow : tier === 3 ? C64.lightRed : '#f06078';
       c.globalAlpha = 0.8;
       c.beginPath(); c.arc(x + 4, y + 4, 3, 0, Math.PI * 2); c.stroke();
       c.globalAlpha = 1;
@@ -460,9 +460,9 @@ function drawShardDirect(c: CanvasRenderingContext2D, th: Theme, x: number, y: n
   const sy = y + bob;
   if (tier <= 4) {
     // 3.5" floppy
-    c.fillStyle = '#20266a'; c.fillRect(x - 4, sy - 4, 8, 8);
-    c.fillStyle = '#b8bcd0'; c.fillRect(x - 1, sy - 4, 4, 3);   // shutter
-    c.fillStyle = '#e8e8f0'; c.fillRect(x - 3, sy, 6, 3);       // label
+    c.fillStyle = tier === 3 ? C64.blue : '#20266a'; c.fillRect(x - 4, sy - 4, 8, 8);
+    c.fillStyle = tier === 3 ? C64.lightGrey : '#b8bcd0'; c.fillRect(x - 1, sy - 4, 4, 3);   // shutter
+    c.fillStyle = tier === 3 ? C64.white : '#e8e8f0'; c.fillRect(x - 3, sy, 6, 3);           // label
   } else {
     // CD
     c.fillStyle = '#d4d8e8';
@@ -481,7 +481,9 @@ function drawShardDirect(c: CanvasRenderingContext2D, th: Theme, x: number, y: n
 function drawBoltDirect(
   c: CanvasRenderingContext2D, g: Game, x: number, y: number, tier: number, ice: boolean,
 ): void {
-  c.fillStyle = ice ? '#9ce8ff' : tier >= 5 ? '#ffd24a' : '#ffe860';
+  c.fillStyle = ice
+    ? (tier === 3 ? C64.cyan : '#9ce8ff')
+    : tier >= 5 ? '#ffd24a' : tier === 3 ? C64.yellow : '#ffe860';
   c.beginPath(); c.arc(x, y, 2.4, 0, Math.PI * 2); c.fill();
   c.fillStyle = '#ffffff';
   c.fillRect(x - 1, y - 1, 2, 2);
@@ -518,11 +520,11 @@ function directRender(c: CanvasRenderingContext2D, g: Game, envTier: number): vo
     if (g.berryCd[i] > 0) return;
     const bx = b.x * TILE - camX, by = b.y * TILE - camY;
     if (bx < -8 || by < -8 || bx > SCR_W || by > SCR_H) return;
-    c.fillStyle = '#e03040';
+    c.fillStyle = envTier === 3 ? C64.lightRed : '#e03040';
     c.fillRect(bx + 2, by + 2, 2, 2);
     c.fillRect(bx + 5, by + 3, 2, 2);
     c.fillRect(bx + 3, by + 5, 2, 2);
-    c.fillStyle = '#ffb0b8';
+    c.fillStyle = envTier === 3 ? C64.white : '#ffb0b8';
     c.fillRect(bx + 2, by + 2, 1, 1);
   });
 
@@ -533,7 +535,8 @@ function directRender(c: CanvasRenderingContext2D, g: Game, envTier: number): vo
     const icePickup = owner.wand === 'fire';
     c.fillStyle = th.stone;
     c.fillRect(sx + 1, sy + 4, 6, 4);
-    drawPat(c, icePickup ? WAND_ICE : WAND_FIRE, sx, sy - 5, icePickup ? '#8ce0ff' : '#ff7040');
+    drawPat(c, icePickup ? WAND_ICE : WAND_FIRE, sx, sy - 5,
+      icePickup ? (envTier === 3 ? C64.cyan : '#8ce0ff') : (envTier === 3 ? C64.lightRed : '#ff7040'));
   }
 
   for (const e of [g.player, g.rival]) {
@@ -614,7 +617,7 @@ function hudColors(envTier: number): { bg: string; fg: string; acc: string; hp: 
   if (envTier === 0) return { bg: '#000000', fg: '#ffffff', acc: '#ffffff', hp: '#ffffff' };
   if (envTier <= 2) return { bg: '#000000', fg: SPECTRUM[15], acc: SPECTRUM[14], hp: SPECTRUM[10] };
   const th = THEME[envTier];
-  return { bg: th.hudBg, fg: th.hudFg, acc: th.hudAccent, hp: '#f05060' };
+  return { bg: th.hudBg, fg: th.hudFg, acc: th.hudAccent, hp: envTier === 3 ? C64.lightRed : '#f05060' };
 }
 
 function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
@@ -627,7 +630,7 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
   drawText(c, '♥'.repeat(p.hp), 122, SCR_H + 2, col.hp);
   drawText(c, '◆'.repeat(p.shards), 140, SCR_H + 2, col.acc);
   drawPat(c, p.wand === 'ice' ? WAND_ICE : WAND_FIRE, 156, SCR_H + 1,
-    p.wand === 'ice' ? '#8ce0ff' : '#ff7040');
+    p.wand === 'ice' ? (envTier === 3 ? C64.cyan : '#8ce0ff') : (envTier === 3 ? C64.lightRed : '#ff7040'));
   drawText(c, `KERNAGH T${r.tier} ${TIERS[r.tier].name}`, 2, SCR_H + 9, col.fg);
   drawText(c, '♥'.repeat(r.hp), 122, SCR_H + 9, col.hp);
   drawText(c, '◆'.repeat(r.shards), 140, SCR_H + 9, col.acc);
@@ -644,10 +647,11 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
   c.fillRect(MM_X - 1, MM_Y - 1, 6 * 5 + 1, 4 * 3 + 1);
   for (let sy = 0; sy < 4; sy++) {
     for (let sx = 0; sx < 6; sx++) {
-      let cc = mono ? '#3c3c3c' : '#303030';
-      if (sx === g.world.pSafe.x && sy === g.world.pSafe.y) cc = mono ? '#909090' : SPECTRUM[4];   // village
-      if (sx === g.world.rSafe.x && sy === g.world.rSafe.y) cc = mono ? '#909090' : SPECTRUM[10];  // keep
-      if (sx === stonesScr.x && sy === stonesScr.y) cc = mono ? '#c0c0c0' : SPECTRUM[13];          // stones
+      const c64 = envTier === 3;
+      let cc = mono ? '#3c3c3c' : c64 ? C64.darkGrey : '#303030';
+      if (sx === g.world.pSafe.x && sy === g.world.pSafe.y) cc = mono ? '#909090' : c64 ? C64.green : SPECTRUM[4];      // village
+      if (sx === g.world.rSafe.x && sy === g.world.rSafe.y) cc = mono ? '#909090' : c64 ? C64.lightRed : SPECTRUM[10];  // keep
+      if (sx === stonesScr.x && sy === stonesScr.y) cc = mono ? '#c0c0c0' : c64 ? C64.cyan : SPECTRUM[13];              // stones
       if (sx === cur.x && sy === cur.y && Math.floor(g.time * 4) % 2 === 0) cc = '#ffffff';
       c.fillStyle = cc;
       c.fillRect(MM_X + sx * 5, MM_Y + sy * 3, 4, 2);
