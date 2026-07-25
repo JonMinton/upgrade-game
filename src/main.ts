@@ -153,7 +153,9 @@ let lastFrameAt = performance.now();
     return ms;
   };
 
-function frame(now: number): void {
+// One update+render pass. Scheduling lives in frame()/schedule() so the
+// watchdog can tick the simulation without ever forking the rAF loop.
+function tick(now: number, draw = true): void {
   lastFrameAt = now;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
@@ -283,15 +285,30 @@ function frame(now: number): void {
   if (g.mode === 'title') setTitleMode(true);
   if (g.mode === 'win') setMusicTier(5);
   if (g.mode === 'lose' || g.mode === 'void') setMusicTier(0);   // the Void is silent
-  render(ctx, g, now / 1000);
-  requestAnimationFrame(frame);
+  if (draw) render(ctx, g, now / 1000);
 }
 
-requestAnimationFrame(frame);
+let rafId = 0;
+
+function frame(now: number): void {
+  rafId = 0;
+  tick(now);
+  schedule();
+}
+
+function schedule(): void {
+  if (rafId) return;   // never more than one rAF in flight
+  rafId = requestAnimationFrame(frame);
+}
+
+schedule();
 
 // Watchdog: rAF stalls when the window is hidden/occluded; keep the world
 // simulating (at a lower rate) so the game doesn't freeze in the background.
+// Simulation only — no draw (nothing composites while hidden), and no rAF
+// re-arm, so the main loop can never be forked or re-entered from here.
 setInterval(() => {
+  if (document.visibilityState === 'visible') return;
   const now = performance.now();
-  if (now - lastFrameAt > 150) frame(now);
+  if (now - lastFrameAt > 150) tick(now, false);
 }, 100);
