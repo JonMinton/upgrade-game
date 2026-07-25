@@ -7,7 +7,7 @@
 // The same module owns the per-visit pushstone offer: a seeded coin flip,
 // then placement at the crossing where a ford would save the longest detour.
 
-import { Tl, SOLID, WORLD_TW, WORLD_TH, Vec } from './defs';
+import { Tl, SOLID, WORLD_TW, WORLD_TH, Vec, DMG_CFG } from './defs';
 import { floodFrom, mulberry32, pushSlideTiles } from './map';
 
 const W = WORLD_TW, H = WORLD_TH;
@@ -110,11 +110,14 @@ export function evolveTiles(tiles: Uint8Array, mapName: string, gen: number): vo
     for (let x = 1; x < W - 1; x++) {
       const i = y * W + x;
       const t = src[i];
-      if (t !== Tl.TREE && t !== Tl.GRASS && t !== Tl.DIRT && t !== Tl.REED) continue;
+      if (t !== Tl.TREE && t !== Tl.GRASS && t !== Tl.DIRT && t !== Tl.REED && t !== Tl.RUIN) continue;
       const bias = near(x, y, Tl.PATH, 2) ? R.witnessBias : 1;
       const roll = (p: number): boolean => rng() < Math.min(1, p * bias);
 
-      if (t === Tl.TREE) {
+      if (t === Tl.RUIN) {
+        // Masonry only ever slumps: a death, so it can never cost reachability.
+        if (roll(DMG_CFG.ruinCrumble)) tiles[i] = Tl.DIRT;
+      } else if (t === Tl.TREE) {
         const n = count8(x, y, Tl.TREE);
         if (n >= 6 ? roll(R.treeSenesce) : n <= 3 && roll(R.treeExposed)) tiles[i] = Tl.GRASS;
       } else if (t === Tl.REED) {
@@ -140,6 +143,83 @@ export function evolveTiles(tiles: Uint8Array, mapName: string, gen: number): vo
   if (treeBirths.length && poisOk(tiles) === false) {
     for (const i of treeBirths) tiles[i] = src[i];
   }
+}
+
+// --- The damage ledger: combat scars that outlive the game that made them.
+//
+// Burnt stumps and cracked rock earned in play are stored per map (tile
+// index -> tile) and stamped onto the freshly evolved valley each new game.
+// At every completed game the whole ledger weathers once, with seeded rolls:
+// stumps mostly persist, sometimes decay to earth, rarely resolve into a
+// pushstone; cracked rock persists, converts to ruin or earth, or — rarely —
+// a pushstone; ruins slump to earth; earth and pushstones rest where they lie.
+
+const DMG_SOLID = new Set<number>([Tl.STUMP, Tl.CRACK, Tl.RUIN, Tl.PUSH]);
+
+export function loadDamage(mapName: string): Record<string, number> {
+  try {
+    const raw = localStorage.getItem('upgrade-dmg-' + mapName);
+    return raw ? JSON.parse(raw) as Record<string, number> : {};
+  } catch { return {}; }
+}
+
+// Stamp the surviving scars onto a freshly evolved map. Walkable scars can
+// never hurt; each solid one is checked against POI reachability and skipped
+// for this game if the valley has since grown to depend on that very tile.
+export function applyDamage(tiles: Uint8Array, mapName: string): void {
+  const dmg = loadDamage(mapName);
+  for (const [k, t] of Object.entries(dmg)) {
+    const i = +k;
+    if (!(i >= 0 && i < tiles.length)) continue;
+    if (!DMG_SOLID.has(t)) { tiles[i] = t; continue; }
+    const keep = tiles[i];
+    tiles[i] = t;
+    if (poisOk(tiles) === false) tiles[i] = keep;
+  }
+}
+
+// Merge a finished game's fresh scars into the ledger, weather everything one
+// step, persist. Call after bumpVisit so the raw visit count seeds the rolls
+// (raw, not capped: a capped seed would repeat the same roll forever).
+export function saveDamage(mapName: string, fresh: Record<number, number>): void {
+  const cur = loadDamage(mapName);
+  for (const [k, t] of Object.entries(fresh)) {
+    cur[k] = t === Tl.BURN ? Tl.STUMP : t;   // still burning at game end: it burns out
+  }
+  let raw = 0;
+  try { raw = parseInt(localStorage.getItem('upgrade-evo-' + mapName) ?? '0', 10) || 0; } catch { /* private mode */ }
+  const rng = rngFor(mapName + '*DMG', raw);
+  const D = DMG_CFG;
+  const next: Record<string, number> = {};
+  for (const [k, t] of Object.entries(cur)) {
+    const r = rng();
+    let nt = t;
+    if (t === Tl.STUMP) {
+      nt = r < D.stumpStay ? Tl.STUMP : r < D.stumpStay + D.stumpPush ? Tl.PUSH : Tl.DIRT;
+    } else if (t === Tl.CRACK) {
+      nt = r < D.crackStay ? Tl.CRACK
+        : r < D.crackStay + D.crackRuin ? Tl.RUIN
+        : r < D.crackStay + D.crackRuin + D.crackPush ? Tl.PUSH : Tl.DIRT;
+    } else if (t === Tl.RUIN) {
+      nt = r < D.ruinCrumble ? Tl.DIRT : Tl.RUIN;
+    }
+    next[k] = nt;
+  }
+  try { localStorage.setItem('upgrade-dmg-' + mapName, JSON.stringify(next)); } catch { /* private mode */ }
+}
+
+// The Void consumes the valley's whole history: every map's age and every
+// scar, back to genesis. (The Hall of Signals and unlocks are the player's,
+// not the valley's, and survive.)
+export function resetWorldState(): void {
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('upgrade-evo-') || k.startsWith('upgrade-dmg-'))) doomed.push(k);
+    }
+    for (const k of doomed) localStorage.removeItem(k);
+  } catch { /* private mode */ }
 }
 
 // --- The per-visit pushstone offer.

@@ -1,11 +1,11 @@
 // UPGRADE — entry point: input, loop, mode transitions.
 
-import { Game, Input, CANVAS_W, CANVAS_H, PUSH_CFG } from './defs';
+import { Game, Input, CANVAS_W, CANVAS_H, PUSH_CFG, DMG_CFG } from './defs';
 import { newGame, update, msg, finalScore } from './game';
 import { render } from './render';
 import { initAudio, setTitleMode, setMusicTier } from './audio';
 import { qualifies, addScore, cycleMapFilter } from './hiscores';
-import { bumpVisit, visitCount, EVO_RATES } from './evolve';
+import { bumpVisit, visitCount, EVO_RATES, saveDamage, resetWorldState } from './evolve';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 canvas.width = CANVAS_W;
@@ -131,6 +131,8 @@ let lastFrameAt = performance.now();
 };
 // Pushstone tuning knobs, live-editable while playtesting.
 (window as unknown as { __push: typeof PUSH_CFG }).__push = PUSH_CFG;
+// Combat-scarring knobs (ignite/crack chances, between-game weathering).
+(window as unknown as { __dmg: typeof DMG_CFG }).__dmg = DMG_CFG;
 // Valley-evolution handles: read/set a map's visit count, tweak CA rates.
 (window as unknown as { __evo: object }).__evo = {
   visits: (m = 'GLEN') => visitCount(m),
@@ -171,12 +173,20 @@ function frame(now: number): void {
   }
 
   // Finalise the score once per game and open initials entry if it ranks.
-  if ((g.mode === 'win' || g.mode === 'lose') && !g.scored) {
+  // Walking into the Void earns nothing and UNDOES everything: the valley's
+  // whole history — ages and scars on every map — resets to genesis.
+  if ((g.mode === 'win' || g.mode === 'lose' || g.mode === 'void') && !g.scored) {
     g.scored = true;
-    // A finished game ages its map by one generation (chaos maps don't age).
-    if (g.chaosSeed == null) bumpVisit(g.mapName);
+    if (g.mode === 'void') {
+      resetWorldState();
+    } else if (g.chaosSeed == null) {
+      // A finished game ages its map by one generation (chaos maps don't
+      // age), and its combat scars join the map's ledger, weathering once.
+      bumpVisit(g.mapName);
+      saveDamage(g.mapName, g.dmg);
+    }
     g.score = finalScore(g);
-    if (qualifies(g.score)) {
+    if (g.mode !== 'void' && qualifies(g.score)) {
       g.entryActive = true;
       g.entryName = '';
     }
@@ -235,7 +245,7 @@ function frame(now: number): void {
   // ESC in play arms a confirm; a second ESC within the window quits.
   if (escPressed) {
     escPressed = false;
-    if ((g.mode === 'win' || g.mode === 'lose') && !g.entryActive) {
+    if ((g.mode === 'win' || g.mode === 'lose' || g.mode === 'void') && !g.entryActive) {
       difficulty = 'easy';
       chaosSeed = null;
       g = newGame(difficulty);
@@ -272,7 +282,7 @@ function frame(now: number): void {
   update(g, input, dt);
   if (g.mode === 'title') setTitleMode(true);
   if (g.mode === 'win') setMusicTier(5);
-  if (g.mode === 'lose') setMusicTier(0);
+  if (g.mode === 'lose' || g.mode === 'void') setMusicTier(0);   // the Void is silent
   render(ctx, g, now / 1000);
   requestAnimationFrame(frame);
 }

@@ -3,11 +3,11 @@
 import {
   Game, Ent, Input, World, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, FINAL_CHANNEL_TIME,
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
-  FREEZE_TIME, STAGGER_TIME, WORLD_TW, Tl, PUSH_CFG,
+  FREEZE_TIME, STAGGER_TIME, WORLD_TW, WORLD_TH, Tl, PUSH_CFG, DMG_CFG, DRAGGABLE, Bolt,
 } from './defs';
 import { glenTiles, worldFromTiles, moveEnt, solidTile, blocksBolt, tileAt, pushSlide } from './map';
 import { ruleGenTiles } from './rulegen';
-import { evolveTiles, placePushstone, visitCount, rngFor } from './evolve';
+import { evolveTiles, placePushstone, visitCount, rngFor, applyDamage } from './evolve';
 import { updateRival } from './ai';
 import { sfx, setMusicTier, SfxName } from './audio';
 
@@ -46,11 +46,13 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number 
         const t = Uint8Array.from(JSON.parse(o) as number[]);
         mapName = (localStorage.getItem('upgrade-map-name') || 'CUSTOM').toUpperCase().slice(0, 6);
         for (let i = 1; i <= visitCount(mapName); i++) evolveTiles(t, mapName, i);
+        applyDamage(t, mapName);
         world = worldFromTiles(t);
       } else {
         const t = glenTiles();
         const n = visitCount('GLEN');
         for (let i = 1; i <= n; i++) evolveTiles(t, 'GLEN', i);
+        applyDamage(t, 'GLEN');
         placePushstone(t, rngFor('PUSH:GLEN', n));
         world = worldFromTiles(t);
       }
@@ -66,7 +68,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number 
     berryCd: world.berrySpots.map(() => 0),
     respawn: RESPAWN_EVERY,
     msg: '', msgUntil: 0,
-    push: null,
+    push: null, drag: null, burns: [], dmg: {},
     ripple: -1, rippleFrom: START_TIER,
     ai: {
       state: 'forage', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
@@ -134,6 +136,68 @@ function fire(g: Game, e: Ent, dx: number, dy: number): void {
     life: BOLT_LIFE, fromRival: e.rival, tier: e.tier, kind: e.wand,
   });
   relSfx(g, 'zap', e.tier, e.x, e.y);
+}
+
+// --- Combat scarring: bolts occasionally deform what they strike.
+
+function onPlayerScreen(g: Game, x: number, y: number): boolean {
+  const s = screenOf(x, y), q = screenOf(g.player.x, g.player.y);
+  return s.x === q.x && s.y === q.y;
+}
+
+function ignite(g: Game, tx: number, ty: number): void {
+  if (tx < 0 || ty < 0 || tx >= WORLD_TW || ty >= WORLD_TH) return;
+  g.world.tiles[ty * WORLD_TW + tx] = Tl.BURN;
+  // Scarred at ignition: even if the game ends mid-blaze, the tree is lost.
+  g.dmg[ty * WORLD_TW + tx] = Tl.STUMP;
+  g.burns.push({ tx, ty, until: g.time + DMG_CFG.burnSecs, next: g.time + 0.5 });
+  relSfx(g, 'ignite', g.player.tier, tx * TILE + 4, ty * TILE + 4);
+}
+
+// A bolt that died on a solid tile may scar it: firewand kindles trees,
+// icewand frost-splits the standing stones.
+function scorch(g: Game, b: Bolt): void {
+  const tx = Math.floor(b.x / TILE), ty = Math.floor(b.y / TILE);
+  if (tx < 0 || ty < 0 || tx >= WORLD_TW || ty >= WORLD_TH) return;
+  const t = tileAt(g.world, tx, ty);
+  if (b.kind === 'fire' && t === Tl.TREE && Math.random() < DMG_CFG.igniteP) {
+    ignite(g, tx, ty);
+    if (onPlayerScreen(g, b.x, b.y)) msg(g, 'THE TREE TAKES FLAME');
+  } else if (b.kind === 'ice' && t === Tl.STONE && Math.random() < DMG_CFG.crackP) {
+    const i = ty * WORLD_TW + tx;
+    g.world.tiles[i] = Tl.CRACK;
+    g.dmg[i] = Tl.CRACK;
+    g.fx.push({ x: tx * TILE + 4, y: ty * TILE + 4, t0: g.time, kind: 0 });
+    relSfx(g, 'crack', g.player.tier, tx * TILE + 4, ty * TILE + 4);
+    if (onPlayerScreen(g, b.x, b.y)) msg(g, 'THE STONE SPLITS');
+  }
+}
+
+// Burning trees: creep to neighbours on a slow tick, then fall to stump.
+function updateBurns(g: Game): void {
+  for (let i = g.burns.length - 1; i >= 0; i--) {
+    const b = g.burns[i];
+    if (g.time >= b.next) {
+      b.next += 0.5;
+      // The cap keeps an unlucky valley from becoming a firestorm; the safe
+      // home screens never burn.
+      if (g.burns.length < 12) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = b.tx + dx, ny = b.ty + dy;
+          if (tileAt(g.world, nx, ny) === Tl.TREE
+            && !inSafe(g.world, nx * TILE + 4, ny * TILE + 4)
+            && Math.random() < DMG_CFG.spreadP) {
+            ignite(g, nx, ny);
+          }
+        }
+      }
+    }
+    if (g.time >= b.until) {
+      g.world.tiles[b.ty * WORLD_TW + b.tx] = Tl.STUMP;
+      g.fx.push({ x: b.tx * TILE + 4, y: b.ty * TILE + 4, t0: g.time, kind: 1 });
+      g.burns.splice(i, 1);
+    }
+  }
 }
 
 // Compass bearing from the player to the Standing Stones altar.
@@ -271,20 +335,79 @@ export function update(g: Game, inp: Input, dt: number): void {
   g.time += dt;
   const p = g.player, r = g.rival;
 
+  // --- Stone drag intent: FIRE held plus the single direction pointing
+  // directly away from an adjacent draggable stone. Claimed before movement
+  // (hauling slows the walk) and before firing (both hands are on the stone).
+  let dragStone = -1, dragDx = 0, dragDy = 0;
+  if (inp.fire && p.stun <= 0) {
+    const ddx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    const ddy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+    if ((ddx === 0) !== (ddy === 0)) {
+      const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
+      const stx = ptx - ddx, sty = pty - ddy;
+      const t = tileAt(g.world, stx, sty);
+      if (DRAGGABLE.has(t)) {
+        dragStone = t; dragDx = ddx; dragDy = ddy;
+        if (!g.drag || g.drag.tx !== stx || g.drag.ty !== sty) {
+          // A fresh grab: whatever the stone stood on originally is lost —
+          // it leaves the bare socket every heaved stone leaves.
+          g.drag = { tx: stx, ty: sty, t, under: Tl.DIRT };
+        }
+      }
+    }
+  }
+
   // --- Player movement (locked while frozen/staggered)
   let dx = p.stun > 0 ? 0 : (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
   let dy = p.stun > 0 ? 0 : (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
   if (dx && dy) { dx *= 0.7071; dy *= 0.7071; }
+  const spd = dragStone < 0 ? SPEED
+    : SPEED * (dragStone === Tl.PUSH ? PUSH_CFG.dragFactor : PUSH_CFG.dragFactorStone);
   if (dx || dy) {
-    const m = moveEnt(g.world, p, dx * SPEED * dt, dy * SPEED * dt, r);
+    const m = moveEnt(g.world, p, dx * spd * dt, dy * spd * dt, r);
     p.animDist += m;
     p.stepAcc += m;
     p.facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 1 : 0);
     if (p.stepAcc > 11) { p.stepAcc = 0; sfx('step', p.tier, 1); }
   }
-  if (inp.fire && p.cool <= 0 && p.stun <= 0) {
+  if (inp.fire && p.cool <= 0 && p.stun <= 0 && dragStone < 0) {
     if (inSafe(g.world, p.x, p.y)) { sfx('deny', p.tier, 0.7); p.cool = 0.4; }
     else { const v = FACING_VECS[p.facing]; fire(g, p, v[0], v[1]); }
+  }
+
+  // --- The stone follows the hauler: once the wizard has fully left the
+  // adjacent tile, it grinds one tile after them. Grass it vacates is
+  // stripped to bare earth; paths and earth keep their nature. It will only
+  // settle on plain ground — never over a shrine, altar or base sigil.
+  if (dragStone >= 0 && g.drag) {
+    const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
+    const gap = (ptx - g.drag.tx) * dragDx + (pty - g.drag.ty) * dragDy;
+    const aligned = dragDx !== 0 ? pty === g.drag.ty : ptx === g.drag.tx;
+    if (gap >= 2 && aligned) {
+      const ntx = g.drag.tx + dragDx, nty = g.drag.ty + dragDy;
+      const nt = tileAt(g.world, ntx, nty);
+      const plain = nt === Tl.GRASS || nt === Tl.PATH || nt === Tl.DIRT || nt === Tl.REED;
+      const onRival = Math.floor(r.x / TILE) === ntx && Math.floor(r.y / TILE) === nty;
+      if (plain && !onRival) {
+        const T = g.world.tiles;
+        T[g.drag.ty * WORLD_TW + g.drag.tx] = g.drag.under === Tl.GRASS ? Tl.DIRT : g.drag.under;
+        T[nty * WORLD_TW + ntx] = g.drag.t;
+        g.drag = { tx: ntx, ty: nty, t: g.drag.t, under: nt };
+        sfx('push', p.tier);
+      }
+    }
+  }
+
+  // --- The Void: the arena border is just trees, and trees burn. If a breach
+  // has weathered open, the world simply ends at the world's end — stepping
+  // onto the outermost ring is stepping out of the game.
+  {
+    const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
+    if (ptx <= 0 || pty <= 0 || ptx >= WORLD_TW - 1 || pty >= WORLD_TH - 1) {
+      g.mode = 'void';
+      g.endTime = g.time;
+      return;
+    }
   }
 
   // --- Wand station: walk onto your village pedestal to swap fire <-> ice.
@@ -379,7 +502,12 @@ export function update(g: Game, inp: Input, dt: number): void {
       }
     }
     if (gone || hit) g.bolts.splice(i, 1);
+    // A bolt spent on the land itself may deform it (never in a safe screen).
+    if (gone && !hit && !inSafe(g.world, b.x, b.y)) scorch(g, b);
   }
+
+  // --- Fires burn down (and sometimes creep)
+  updateBurns(g);
 
   // --- Shards & berries: pickups + respawn
   pickups(g, p);

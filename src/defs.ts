@@ -21,15 +21,42 @@ export const Tl = {
   PBASE: 14, RBASE: 15,
   RUIN: 16,   // crumbled masonry: solid, but grown in broken runs
   PUSH: 17,   // pushstone: shoved into a river (sustained push), it fords it
+  STUMP: 18,  // burnt stump: what a tree leaves when fire takes it
+  CRACK: 19,  // cracked rock: a standing stone split by icewand frost
+  BURN: 20,   // tree on fire: transient, in-game only (never persisted as-is)
 } as const;
 
-export const SOLID = new Set<number>([Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT, Tl.RUIN, Tl.PUSH]);
+export const SOLID = new Set<number>([
+  Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT, Tl.RUIN, Tl.PUSH,
+  Tl.STUMP, Tl.CRACK, Tl.BURN,
+]);
 
 // Pushstone tuning — mutable at runtime (window.__push) for playtesting.
 export const PUSH_CFG = {
   holdSecs: 4,    // sustained push required before the stone gives
   maxSlide: 4,    // clear tiles the stone may roll before reaching water
   maxSpan: 5,     // widest water run a single stone can ford
+  dragFactor: 0.25,        // hauling a pushstone: fraction of normal walk speed
+  dragFactorStone: 0.34,   // ordinary stones are lighter: roughly one third
+};
+
+// Tiles a wizard can haul by walking backwards-ish: hold FIRE plus the
+// direction directly away from an adjacent stone. Pushstones are the
+// heaviest; ordinary rock and standing stones (cracked or whole) drag a
+// little faster.
+export const DRAGGABLE = new Set<number>([Tl.PUSH, Tl.ROCK, Tl.STONE, Tl.CRACK]);
+
+// Combat scarring — mutable at runtime (window.__dmg) for playtesting.
+// In-game: bolts occasionally deform what they strike. Between games: the
+// scars weather (seeded rolls, one per completed game on the map).
+export const DMG_CFG = {
+  igniteP: 0.07,     // firewand bolt on a tree -> it catches
+  spreadP: 0.02,     // per burning tree, per neighbour tree, per half-second
+  burnSecs: 4.5,     // how long a tree burns before falling to stump
+  crackP: 0.06,      // icewand bolt on a standing stone -> it splits
+  stumpStay: 0.70, stumpPush: 0.07,                     // rest decays to earth
+  crackStay: 0.60, crackRuin: 0.15, crackPush: 0.05,    // rest decays to earth
+  ruinCrumble: 0.03,   // ruins (grown or scarred) slump to earth, slowly
 };
 
 export const START_TIER = 1;
@@ -74,6 +101,9 @@ TILE_ATTR[Tl.PBASE] = [13, 0];
 TILE_ATTR[Tl.RBASE] = [11, 0];
 TILE_ATTR[Tl.RUIN] = [7, 0];
 TILE_ATTR[Tl.PUSH] = [11, 0];   // bright magenta: the one stone that isn't stone-coloured
+TILE_ATTR[Tl.STUMP] = [7, 0];   // charcoal-grey remains of a burnt tree
+TILE_ATTR[Tl.CRACK] = [7, 0];   // a split menhir loses its BRIGHT
+TILE_ATTR[Tl.BURN] = [10, 0];   // bright red base; render flickers it yellow
 
 // C64 palette (Pepto's measured VIC-II values). The VIC-II fixed the chroma
 // amplitude in hardware, so nothing on a C64 was ever fully saturated —
@@ -185,7 +215,7 @@ export interface RivalAI {
 export type Difficulty = 'easy' | 'hard';
 
 export interface Game {
-  mode: 'loading' | 'title' | 'play' | 'win' | 'lose';
+  mode: 'loading' | 'title' | 'play' | 'win' | 'lose' | 'void';
   difficulty: Difficulty;
   loadT: number;
   time: number; world: World;
@@ -213,6 +243,15 @@ export interface Game {
   cheatMsgUntil?: number;     // title flashes the unlock-all confirmation until this wall-clock time
   // Player's in-progress pushstone shove (null when not pushing).
   push: { tx: number; ty: number; dx: number; dy: number; t: number } | null;
+  // Stone-drag bookkeeping: the stone's tile, its tile type, and what it is
+  // currently sitting on (restored — grass downgraded to earth — when it
+  // steps). Survives release so a re-grab doesn't forget a covered path.
+  drag: { tx: number; ty: number; t: number; under: number } | null;
+  // Trees currently on fire: burn-out deadline and next spread-roll time.
+  burns: { tx: number; ty: number; until: number; next: number }[];
+  // Permanent scars earned this game (tile index -> tile), persisted to the
+  // map's damage ledger when the game completes.
+  dmg: Record<number, number>;
 }
 
 export interface Input { up: boolean; down: boolean; left: boolean; right: boolean; fire: boolean }

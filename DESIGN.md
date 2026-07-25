@@ -322,6 +322,41 @@ increasingly rich stereo samples as he pulls ahead.
   (scanned 100 seeds; best on base separation, mid-river presence, and ruin
   richness — including a riverbank ruin near the village). Idle-easy ~9.4 min.
 
+### Combat scars, stone-hauling & the Void (2026-07-25)
+
+- **The arena deforms under combat.** A firewand bolt that dies on a tree has
+  a small chance (7%) of igniting it: the tree burns for ~4.5s (animated at
+  every tier), with a low chance per tick of the fire creeping to adjacent
+  trees (capped at 12 simultaneous blazes; the safe home screens never burn),
+  then falls to a **burnt stump** (solid). An icewand bolt that dies on a
+  standing stone has a 6% chance of frost-splitting it into **cracked rock**
+  (solid). Tuning knobs live on `window.__dmg`.
+- **Scars persist and weather.** Each map keeps a damage ledger
+  (`upgrade-dmg-<MAP>` in localStorage, tile index → tile). On every
+  completed game the ledger weathers once with seeded rolls: stumps mostly
+  remain (70%), decay to earth (23%) or resolve into a **pushstone** (7%);
+  cracked rock remains (60%), crumbles to ruin (15%) or earth (20%), or
+  becomes a pushstone (5%); ruins — scarred or generator-grown, via a new CA
+  rule — slump to earth slowly (3%). Earth and pushstones rest where they
+  lie. On load, solid scars are individually skipped if stamping them would
+  cut any POI off. Chaos maps neither load nor save the ledger.
+- **Stones can be hauled.** Standing next to any stone (pushstone, rock,
+  standing stone, cracked rock) and holding FIRE plus the direction directly
+  away from it drags it: the wizard trudges at quarter speed (pushstone) or
+  a third (ordinary stones), the wand stays holstered, and the stone follows
+  a tile at a time. Grass it grinds over is stripped to bare earth; paths
+  keep their nature; it will never settle on a shrine, altar or base sigil.
+  Weathered-in pushstones can thus be relocated to a useful bank — at
+  considerable effort.
+- **The Void.** The arena border is only trees, and trees burn. If a border
+  stump decays to earth between games, the world has a hole in it; stepping
+  onto the outermost tile ring ends the game with the `void` screen: *you
+  found The Void — nothing to see, nothing to do, the conflict is over.* No
+  score, no hall entry — and the Void consumes the valley's entire history:
+  visit ledgers and damage ledgers for every map reset to genesis (the Hall
+  of Signals and unlocks are the player's, not the valley's, and survive).
+  ESC is the only way back.
+
 ## Future work
 
 - **Server-backed Hall of Signals.** localStorage is per-browser; the plan:

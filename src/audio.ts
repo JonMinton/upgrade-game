@@ -176,7 +176,7 @@ function stepAt(absStep: number, t: number): void {
 
 export type SfxName =
   'step' | 'zap' | 'hit' | 'pickup' | 'derez' | 'upgrade' | 'ritual' | 'deny'
-  | 'spawn' | 'berry' | 'freeze' | 'wand' | 'push' | 'pushdone';
+  | 'spawn' | 'berry' | 'freeze' | 'wand' | 'push' | 'pushdone' | 'ignite' | 'crack';
 
 export function sfx(name: SfxName, tier: number, vol = 1, pan = 0): void {
   if (!ac || vol <= 0.01) return;
@@ -240,6 +240,23 @@ export function sfx(name: SfxName, tier: number, vol = 1, pan = 0): void {
       // Stone grinding on earth: one effortful heave per burst.
       if (tier <= 1) tone(75, 55, 0.12, 'square', 0.13 * vol, pan);
       else { noise(0.14, 260, 'lowpass', 0.26 * vol, pan); tone(70, 55, 0.12, 'sawtooth', 0.06 * vol, pan); }
+      break;
+    case 'ignite':
+      // A tree catching: a soft whump, then crackle.
+      if (tier <= 1) { tone(220, 420, 0.2, 'square', 0.12 * vol, pan); }
+      else {
+        noise(0.25, 500, 'lowpass', 0.2 * vol, pan);
+        noise(0.4, 3600, 'highpass', 0.08 * vol, pan, 0.12);
+        tone(180, 320, 0.18, 'triangle', 0.08 * vol, pan);
+      }
+      break;
+    case 'crack':
+      // Frost splitting stone: a sharp snap with a cold tail.
+      tone(1500, 220, 0.09, 'square', 0.18 * vol, pan);
+      if (tier >= 2) {
+        noise(0.06, 4500, 'highpass', 0.12 * vol, pan);
+        tone(2600, 900, 0.25, 'triangle', 0.05 * vol, pan, 0.05);
+      }
       break;
     case 'pushdone':
       // The stone settles into the riverbed: deep thunk, then the splash.

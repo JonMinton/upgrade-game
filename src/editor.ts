@@ -70,7 +70,7 @@ const fake: Game = {
   mode: 'play', difficulty: 'hard', loadT: 0, time: 0, world,
   player: offEnt(), rival: { ...offEnt(), rival: true },
   bolts: [], shards: [], fx: [], berryCd: [],
-  respawn: 99, msg: '', msgUntil: 0, push: null, ripple: -1, rippleFrom: 1,
+  respawn: 99, msg: '', msgUntil: 0, push: null, drag: null, burns: [], dmg: {}, ripple: -1, rippleFrom: 1,
   ai: {
     state: '', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
     targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0, nearT: 0,

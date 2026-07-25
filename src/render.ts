@@ -12,7 +12,7 @@ import {
 import { tileAt } from './map';
 import {
   PATTERNS, GRASS_ALT, BOLT_PATS, shardPat, wizMask, bandOfRow,
-  BERRY_DOTS, WAND_FIRE, WAND_ICE, SHARD_TAPE,
+  BERRY_DOTS, WAND_FIRE, WAND_ICE, SHARD_TAPE, BURN_TILE,
 } from './sprites';
 import { drawText, textWidth } from './font';
 import { filteredScores, activeMapFilter } from './hiscores';
@@ -192,11 +192,14 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
     for (let cx = 0; cx < SCR_TW; cx++) {
       const tx = camTx + cx, ty = camTy + cy;
       const t = tileAt(w, tx, ty);
-      const pat = t === Tl.GRASS && ((tx + ty) & 1) ? GRASS_ALT : PATTERNS[t];
+      const pat = t === Tl.GRASS && ((tx + ty) & 1) ? GRASS_ALT
+        : t === Tl.BURN ? BURN_TILE[Math.floor(g.time * 9 + tx) % 2]
+        : PATTERNS[t];
       // At T0 the shrines are too degraded to render — the blinking shard IS the signal.
       if (!(envTier === 0 && t === Tl.SHRINE)) stampPat(cx * 8, cy * 8, pat);
       const ci = cy * SCR_TW + cx;
-      inkA[ci] = TILE_ATTR[t][0];
+      // Burning trees flicker red/yellow — the one tile whose attribute moves.
+      inkA[ci] = t === Tl.BURN && Math.floor(g.time * 9 + tx + ty) % 2 ? 14 : TILE_ATTR[t][0];
       papA[ci] = TILE_ATTR[t][1];
     }
   }
@@ -453,6 +456,44 @@ function drawTileDirect(
       c.fillRect(x + 2, y + 2, 2, 1);
       c.fillStyle = tier === 3 ? C64.blue : '#1e5a58';
       c.fillRect(x + 3, y + 5, 3, 1);   // the score-line across the facet
+      break;
+    }
+    case Tl.STUMP: {
+      // Burnt stump: a charred stub with jagged spikes over a dusting of ash.
+      c.fillStyle = tier === 3 ? C64.grey : '#6e6862';
+      c.fillRect(x + 2, y + 6, 5, 1);
+      c.fillStyle = tier === 3 ? C64.black : '#1c1512';
+      c.fillRect(x + 3, y + 3, 3, 4);
+      c.fillRect(x + 2, y + 4, 1, 3);
+      c.fillRect(x + 3, y + 2, 1, 1);
+      c.fillRect(x + 5, y + 1, 1, 2);
+      break;
+    }
+    case Tl.CRACK: {
+      // A split menhir: duller than its whole kin, a fissure zigzagging down.
+      if (tier >= 4) {
+        c.fillStyle = 'rgba(0,0,0,0.25)';
+        c.beginPath(); c.ellipse(x + 4, y + 7.5, 3.4, 1.2, 0, 0, Math.PI * 2); c.fill();
+      }
+      c.fillStyle = th.rock; c.fillRect(x + 2, y + 1, 4, 7);
+      c.fillStyle = th.rockHi; c.fillRect(x + 2, y + 1, 1, 7);
+      c.fillStyle = tier === 3 ? C64.black : '#14161e';
+      c.fillRect(x + 4, y + 1, 1, 2);
+      c.fillRect(x + 3, y + 3, 1, 2);
+      c.fillRect(x + 4, y + 5, 1, 3);
+      break;
+    }
+    case Tl.BURN: {
+      // Tree ablaze: canopy charring to brown while flames lick through.
+      c.fillStyle = th.trunk; c.fillRect(x + 3, y + 5, 2, 3);
+      c.fillStyle = tier === 3 ? C64.brown : '#33240f';
+      c.beginPath(); c.arc(x + 4, y + 3, 3.4, 0, Math.PI * 2); c.fill();
+      const ph = Math.floor(time * 10 + wtx * 3 + wty) % 2;
+      c.fillStyle = tier === 3 ? C64.lightRed : '#ff5a28';
+      c.fillRect(x + 2, y + (ph ? 1 : 2), 2, 3);
+      c.fillRect(x + 5, y + (ph ? 3 : 2), 2, 2);
+      c.fillStyle = tier === 3 ? C64.yellow : '#ffd84a';
+      c.fillRect(x + 3 + ph, y + ph, 2, 2);
       break;
     }
     case Tl.RUIN: {
@@ -899,6 +940,23 @@ function drawEndOptions(
   }
 }
 
+// The Void: the screen for the player who walked out of the world. No score,
+// no fireworks, no colour — the game has nothing left to show them.
+function renderVoid(c: CanvasRenderingContext2D, time: number): void {
+  c.fillStyle = '#000000';
+  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  const dim = '#5a5a5a', dimmer = '#333333';
+  drawText(c, 'YOU FOUND THE VOID', Math.floor((CANVAS_W - textWidth('YOU FOUND THE VOID', 2)) / 2), 56, dim, 2);
+  const lines = ['NOTHING.', 'NOTHING TO SEE. NOTHING TO DO.', 'THE CONFLICT IS OVER...'];
+  lines.forEach((s, i) => {
+    drawText(c, s, Math.floor((CANVAS_W - textWidth(s)) / 2), 88 + i * 14, dimmer);
+  });
+  // The one concession: a way back, barely visible, blinking slowly.
+  if (Math.floor(time) % 3 === 0) {
+    drawText(c, 'ESC', Math.floor((CANVAS_W - textWidth('ESC')) / 2), 158, dimmer);
+  }
+}
+
 function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: number): void {
   if (win && g.winWhy === 'elimination') {
     // Partial victory: Kernagh is gone, but the screen only celebrates at the
@@ -982,6 +1040,7 @@ export function render(c: CanvasRenderingContext2D, g: Game, time: number): void
   }
   if (g.mode === 'win') { renderEnd(c, g, true, time); return; }
   if (g.mode === 'lose') { renderEnd(c, g, false, time); return; }
+  if (g.mode === 'void') { renderVoid(c, time); return; }
 
   const rippleT = g.ripple >= 0 ? g.time - g.ripple : 99;
   if (rippleT < 1) {
