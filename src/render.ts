@@ -35,8 +35,29 @@ const papA = new Uint8Array(SCR_TW * SCR_TH);
 
 let img: ImageData | null = null;
 let px32: Uint32Array | null = null;
-let offA: HTMLCanvasElement | null = null;
-let offB: HTMLCanvasElement | null = null;
+// Upgrade-ripple compositing buffers. Created eagerly with their contexts:
+// lazy creation would land on the first upgrade, the frame with the most
+// work already in it.
+const offA = document.createElement('canvas');
+const offB = document.createElement('canvas');
+offA.width = SCR_W; offA.height = SCR_H;
+offB.width = SCR_W; offB.height = SCR_H;
+const offACtx = offA.getContext('2d')!;
+const offBCtx = offB.getContext('2d')!;
+let rippleSnapAt = -1;   // which g.ripple offA currently holds
+
+// Cloud-shadow sprite, pre-rendered at full opacity and stamped with
+// globalAlpha per tier — createRadialGradient every frame is allocator churn.
+const cloudSprite = document.createElement('canvas');
+cloudSprite.width = 160; cloudSprite.height = 160;
+{
+  const cc = cloudSprite.getContext('2d')!;
+  const grad = cc.createRadialGradient(80, 80, 8, 80, 80, 80);
+  grad.addColorStop(0, 'rgba(0,0,32,1)');
+  grad.addColorStop(1, 'rgba(0,0,32,0)');
+  cc.fillStyle = grad;
+  cc.fillRect(0, 0, 160, 160);
+}
 
 const SPEC_ABGR = SPECTRUM.map(h => {
   const r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
@@ -622,16 +643,13 @@ function directRender(c: CanvasRenderingContext2D, g: Game, envTier: number): vo
 
   // Drifting cloud shadows: the "lush 16-bit" ambient layer (soft-edged).
   if (envTier >= 4) {
+    c.globalAlpha = envTier >= 5 ? 0.1 : 0.06;
     for (let i = 0; i < 2; i++) {
       const cxp = ((g.time * (7 + i * 4) + i * 700) % (SCR_W + 260)) - 130;
       const cyp = 40 + i * 70;
-      const grad = c.createRadialGradient(cxp, cyp, 8, cxp, cyp, 80);
-      const a = envTier >= 5 ? 0.1 : 0.06;
-      grad.addColorStop(0, `rgba(0,0,32,${a})`);
-      grad.addColorStop(1, 'rgba(0,0,32,0)');
-      c.fillStyle = grad;
-      c.fillRect(cxp - 80, cyp - 80, 160, 160);
+      c.drawImage(cloudSprite, cxp - 80, cyp - 80);
     }
+    c.globalAlpha = 1;
   }
 }
 
@@ -1044,20 +1062,21 @@ export function render(c: CanvasRenderingContext2D, g: Game, time: number): void
 
   const rippleT = g.ripple >= 0 ? g.time - g.ripple : 99;
   if (rippleT < 1) {
-    if (!offA) {
-      offA = document.createElement('canvas'); offA.width = SCR_W; offA.height = SCR_H;
-      offB = document.createElement('canvas'); offB.width = SCR_W; offB.height = SCR_H;
+    // The old-tier scene hides behind a shrinking sliver and the world
+    // barely moves in one second: capture it once at ripple start, and
+    // re-render only the new tier each frame.
+    if (rippleSnapAt !== g.ripple) {
+      rippleSnapAt = g.ripple;
+      renderPlay(offACtx, g, g.rippleFrom);
     }
-    const ca = offA.getContext('2d')!, cb = offB!.getContext('2d')!;
-    renderPlay(ca, g, g.rippleFrom);
-    renderPlay(cb, g, g.player.tier);
+    renderPlay(offBCtx, g, g.player.tier);
     c.drawImage(offA, 0, 0);
     const sweep = clamp(rippleT * 1.15, 0, 1) * SCR_W;
     c.save();
     c.beginPath();
     c.rect(0, 0, sweep, SCR_H);
     c.clip();
-    c.drawImage(offB!, 0, 0);
+    c.drawImage(offB, 0, 0);
     c.restore();
     c.fillStyle = '#ffffff';
     c.globalAlpha = 0.8;

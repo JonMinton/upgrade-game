@@ -158,11 +158,9 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
     ai.state = 'ritual';
     target = { x: g.world.altarX, y: g.world.altarY };
     key = 'altar';
-  } else if (r.hp <= 2 && berryTarget(g)) {
+  } else if (r.hp <= 2 && (target = berryTarget(g))) {
     ai.state = 'berry';
-    const b = berryTarget(g)!;
-    target = b;
-    key = `b${b.x | 0},${b.y | 0}`;
+    key = `b${target.x | 0},${target.y | 0}`;
   } else if (interceptWorthwhile(g, distP)) {
     ai.state = 'intercept';
     ai.interceptT += dt;

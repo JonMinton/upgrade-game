@@ -546,7 +546,9 @@ export function update(g: Game, inp: Input, dt: number): void {
   }
 
   // --- FX cleanup
-  g.fx = g.fx.filter(f => g.time - f.t0 < 1);
+  for (let i = g.fx.length - 1; i >= 0; i--) {
+    if (g.time - g.fx[i].t0 >= 1) g.fx.splice(i, 1);
+  }
 
   // --- Camera: snap at Spectrum tiers (flick-screen), slide at T3+
   const s = screenOf(p.x, p.y);
