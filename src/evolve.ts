@@ -145,6 +145,46 @@ export function evolveTiles(tiles: Uint8Array, mapName: string, gen: number): vo
   }
 }
 
+// --- Evolution cache. evolveTiles is deterministic per (map, generation), so
+// replaying generations 1..n from genesis on every newGame is O(visits) of
+// pure rework — ~200ms at the 40-visit cap. Cache the latest evolved state
+// per map and evolve only the missing generations. Keyed by a hash of the
+// base tiles and the live rates, so a re-saved editor map or a playtest
+// rates tweak (window.__evo.rates) invalidates naturally.
+
+function tilesHash(t: Uint8Array): number {
+  let h = djb2(JSON.stringify(EVO_RATES));
+  for (let i = 0; i < t.length; i++) h = (Math.imul(h, 33) ^ t[i]) >>> 0;
+  return h;
+}
+
+export function evolveTo(tiles: Uint8Array, mapName: string, gen: number): void {
+  if (gen <= 0) return;
+  const key = 'upgrade-evocache-' + mapName;
+  const base = tilesHash(tiles);
+  let from = 0;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const c = JSON.parse(raw) as { base: number; gen: number; tiles: string };
+      if (c.base === base && c.gen >= 1 && c.gen <= gen) {
+        const dec = atob(c.tiles);
+        if (dec.length === tiles.length) {
+          for (let i = 0; i < tiles.length; i++) tiles[i] = dec.charCodeAt(i);
+          from = c.gen;
+        }
+      }
+    }
+  } catch { /* corrupt or absent cache: replay from genesis */ }
+  for (let i = from + 1; i <= gen; i++) evolveTiles(tiles, mapName, i);
+  if (from === gen) return;
+  try {
+    let s = '';
+    for (let i = 0; i < tiles.length; i++) s += String.fromCharCode(tiles[i]);
+    localStorage.setItem(key, JSON.stringify({ base, gen, tiles: btoa(s) }));
+  } catch { /* private mode / quota: caching is only ever an optimisation */ }
+}
+
 // --- The damage ledger: combat scars that outlive the game that made them.
 //
 // Burnt stumps and cracked rock earned in play are stored per map (tile
@@ -152,7 +192,8 @@ export function evolveTiles(tiles: Uint8Array, mapName: string, gen: number): vo
 // At every completed game the whole ledger weathers once, with seeded rolls:
 // stumps mostly persist, sometimes decay to earth, rarely resolve into a
 // pushstone; cracked rock persists, converts to ruin or earth, or — rarely —
-// a pushstone; ruins slump to earth; earth and pushstones rest where they lie.
+// a pushstone; ruins slump to earth; earth heals out of the ledger entirely,
+// and pushstones rest where they lie (capped — see PUSH_CAP).
 
 const DMG_SOLID = new Set<number>([Tl.STUMP, Tl.CRACK, Tl.RUIN, Tl.PUSH]);
 
@@ -164,19 +205,35 @@ export function loadDamage(mapName: string): Record<string, number> {
 }
 
 // Stamp the surviving scars onto a freshly evolved map. Walkable scars can
-// never hurt; each solid one is checked against POI reachability and skipped
-// for this game if the valley has since grown to depend on that very tile.
+// never hurt; solid ones are checked against POI reachability and skipped
+// for this game if the valley has since grown to depend on those very tiles.
+// One batched check covers the common case (scars almost never sever a POI);
+// only on failure does it fall back to vetting each solid scar in turn.
 export function applyDamage(tiles: Uint8Array, mapName: string): void {
   const dmg = loadDamage(mapName);
+  const solid: Array<[number, number, number]> = [];   // [index, scar, previous]
   for (const [k, t] of Object.entries(dmg)) {
     const i = +k;
     if (!(i >= 0 && i < tiles.length)) continue;
     if (!DMG_SOLID.has(t)) { tiles[i] = t; continue; }
-    const keep = tiles[i];
+    solid.push([i, t, tiles[i]]);
     tiles[i] = t;
+  }
+  if (solid.length === 0 || poisOk(tiles) !== false) return;
+  for (const [i, , keep] of solid) tiles[i] = keep;
+  for (const [i, scar] of solid) {
+    const keep = tiles[i];
+    tiles[i] = scar;
     if (poisOk(tiles) === false) tiles[i] = keep;
   }
 }
+
+// A scar that has weathered all the way back to earth leaves the ledger: the
+// evolved valley's own tile shows through, so the wound has truly healed.
+// Pushstones never weather ("the valley keeps its levers"), so they are the
+// one scar that can accumulate; past PUSH_CAP the surplus slumps to earth
+// too, oldest grudges forgotten at random.
+const PUSH_CAP = 16;
 
 // Merge a finished game's fresh scars into the ledger, weather everything one
 // step, persist. Call after bumpVisit so the raw visit count seeds the rolls
@@ -191,6 +248,7 @@ export function saveDamage(mapName: string, fresh: Record<number, number>): void
   const rng = rngFor(mapName + '*DMG', raw);
   const D = DMG_CFG;
   const next: Record<string, number> = {};
+  const pushes: string[] = [];
   for (const [k, t] of Object.entries(cur)) {
     const r = rng();
     let nt = t;
@@ -203,7 +261,14 @@ export function saveDamage(mapName: string, fresh: Record<number, number>): void
     } else if (t === Tl.RUIN) {
       nt = r < D.ruinCrumble ? Tl.DIRT : Tl.RUIN;
     }
+    if (nt === Tl.DIRT) continue;   // healed: gone from the ledger
+    if (nt === Tl.PUSH) pushes.push(k);
     next[k] = nt;
+  }
+  while (pushes.length > PUSH_CAP) {
+    const j = Math.floor(rng() * pushes.length);
+    delete next[pushes[j]];
+    pushes.splice(j, 1);
   }
   try { localStorage.setItem('upgrade-dmg-' + mapName, JSON.stringify(next)); } catch { /* private mode */ }
 }
@@ -216,7 +281,8 @@ export function resetWorldState(): void {
     const doomed: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && (k.startsWith('upgrade-evo-') || k.startsWith('upgrade-dmg-'))) doomed.push(k);
+      if (k && (k.startsWith('upgrade-evo-') || k.startsWith('upgrade-dmg-')
+        || k.startsWith('upgrade-evocache-'))) doomed.push(k);
     }
     for (const k of doomed) localStorage.removeItem(k);
   } catch { /* private mode */ }

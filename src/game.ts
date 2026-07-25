@@ -7,7 +7,7 @@ import {
 } from './defs';
 import { glenTiles, worldFromTiles, moveEnt, solidTile, blocksBolt, tileAt, pushSlide } from './map';
 import { ruleGenTiles } from './rulegen';
-import { evolveTiles, placePushstone, visitCount, rngFor, applyDamage } from './evolve';
+import { evolveTo, placePushstone, visitCount, rngFor, applyDamage } from './evolve';
 import { updateRival } from './ai';
 import { sfx, setMusicTier, SfxName } from './audio';
 
@@ -45,13 +45,13 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number 
       if (o) {
         const t = Uint8Array.from(JSON.parse(o) as number[]);
         mapName = (localStorage.getItem('upgrade-map-name') || 'CUSTOM').toUpperCase().slice(0, 6);
-        for (let i = 1; i <= visitCount(mapName); i++) evolveTiles(t, mapName, i);
+        evolveTo(t, mapName, visitCount(mapName));
         applyDamage(t, mapName);
         world = worldFromTiles(t);
       } else {
         const t = glenTiles();
         const n = visitCount('GLEN');
-        for (let i = 1; i <= n; i++) evolveTiles(t, 'GLEN', i);
+        evolveTo(t, 'GLEN', n);
         applyDamage(t, 'GLEN');
         placePushstone(t, rngFor('PUSH:GLEN', n));
         world = worldFromTiles(t);
