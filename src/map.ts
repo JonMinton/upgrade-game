@@ -4,7 +4,8 @@
 // through worldFromTiles(), which derives shrines/berries/altar by scanning.
 
 import {
-  SCR_TW, SCR_TH, TILE, WORLD_TW, WORLD_TH, Tl, SOLID, World, Vec, PUSH_CFG,
+  SCR_TW, SCR_TH, TILE, WORLD_TW, WORLD_TH, Tl, SOLID, SOLID_LUT, DX4, DY4,
+  World, Vec, PUSH_CFG,
 } from './defs';
 import { ruleGenTiles } from './rulegen';
 
@@ -24,7 +25,7 @@ export function tileAt(w: World, tx: number, ty: number): number {
 }
 
 export function solidTile(w: World, tx: number, ty: number): boolean {
-  return SOLID.has(tileAt(w, tx, ty));
+  return SOLID_LUT[tileAt(w, tx, ty)] !== 0;
 }
 
 export function solidPx(w: World, x: number, y: number): boolean {
@@ -77,18 +78,24 @@ export function pushSlide(
 const P_HOME_TX = 14, P_HOME_TY = 3 * SCR_TH + 12;
 const R_HOME_TX = 5 * SCR_TW + 16, R_HOME_TY = 3 * SCR_TH + 14;
 
+// Reused queue: each tile enters at most once per flood, and nothing here is
+// reentrant, so one module-level buffer serves every caller.
+const floodQ = new Int32Array(WORLD_TW * WORLD_TH);
+
 export function floodFrom(tiles: Uint8Array, tx: number, ty: number): Uint8Array {
   const reach = new Uint8Array(WORLD_TW * WORLD_TH);
-  const q = [ty * WORLD_TW + tx];
-  reach[q[0]] = 1;
-  while (q.length) {
-    const cur = q.pop()!;
+  let head = 0, tail = 0;
+  const start = ty * WORLD_TW + tx;
+  floodQ[tail++] = start;
+  reach[start] = 1;
+  while (head < tail) {
+    const cur = floodQ[head++];
     const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const nx = cx + dx, ny = cy + dy;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DX4[d], ny = cy + DY4[d];
       if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
       const ni = ny * WORLD_TW + nx;
-      if (!reach[ni] && !SOLID.has(tiles[ni])) { reach[ni] = 1; q.push(ni); }
+      if (!reach[ni] && !SOLID_LUT[tiles[ni]]) { reach[ni] = 1; floodQ[tail++] = ni; }
     }
   }
   return reach;

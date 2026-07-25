@@ -4,6 +4,7 @@ import {
   Game, Ent, Input, World, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, FINAL_CHANNEL_TIME,
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
   FREEZE_TIME, STAGGER_TIME, WORLD_TW, WORLD_TH, Tl, PUSH_CFG, DMG_CFG, DRAGGABLE, Bolt,
+  DX4, DY4,
 } from './defs';
 import { glenTiles, worldFromTiles, moveEnt, solidTile, blocksBolt, tileAt, pushSlide } from './map';
 import { ruleGenTiles } from './rulegen';
@@ -182,8 +183,8 @@ function updateBurns(g: Game): void {
       // The cap keeps an unlucky valley from becoming a firestorm; the safe
       // home screens never burn.
       if (g.burns.length < 12) {
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-          const nx = b.tx + dx, ny = b.ty + dy;
+        for (let k = 0; k < 4; k++) {
+          const nx = b.tx + DX4[k], ny = b.ty + DY4[k];
           if (tileAt(g.world, nx, ny) === Tl.TREE
             && !inSafe(g.world, nx * TILE + 4, ny * TILE + 4)
             && Math.random() < DMG_CFG.spreadP) {

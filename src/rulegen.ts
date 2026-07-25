@@ -12,7 +12,7 @@
 //      unreachable, then one "efficiency" bridge if it shortens the base-to-base
 //      walk substantially.
 
-import { WORLD_TW, WORLD_TH, Tl, SOLID } from './defs';
+import { WORLD_TW, WORLD_TH, Tl, SOLID, SOLID_LUT, DX4, DY4 } from './defs';
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -89,7 +89,8 @@ export function ruleGenTiles(seed: number): Uint8Array {
 
   // --- Rule 3: reeds colonise banks
   for (const p of riverTiles) {
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    for (let k = 0; k < 4; k++) {
+      const dx = DX4[k], dy = DY4[k];
       if (get(p.x + dx, p.y + dy) === Tl.GRASS && rng() < 0.18) set(p.x + dx, p.y + dy, Tl.REED);
     }
   }
@@ -275,11 +276,11 @@ export function ruleGenTiles(seed: number): Uint8Array {
     while (q.length) {
       const cur = q.pop()!;
       const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const nx = cx + dx, ny = cy + dy;
+      for (let k = 0; k < 4; k++) {
+        const nx = cx + DX4[k], ny = cy + DY4[k];
         if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
         const ni = idx(nx, ny);
-        if (!reach[ni] && !SOLID.has(T[ni])) { reach[ni] = 1; q.push(ni); }
+        if (!reach[ni] && !SOLID_LUT[T[ni]]) { reach[ni] = 1; q.push(ni); }
       }
     }
     return reach;
@@ -334,11 +335,11 @@ export function ruleGenTiles(seed: number): Uint8Array {
         const cur = q.pop()!;
         comp.push(cur);
         const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-          const nx = cx + dx, ny = cy + dy;
+        for (let k = 0; k < 4; k++) {
+          const nx = cx + DX4[k], ny = cy + DY4[k];
           if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
           const ni = idx(nx, ny);
-          if (!seen2[ni] && !reach[ni] && !SOLID.has(T[ni])) { seen2[ni] = 1; q.push(ni); }
+          if (!seen2[ni] && !reach[ni] && !SOLID_LUT[T[ni]]) { seen2[ni] = 1; q.push(ni); }
         }
       }
       if (!region || comp.length > region.length) region = comp;
@@ -362,7 +363,8 @@ export function ruleGenTiles(seed: number): Uint8Array {
     let bestCut: number[] | null = null;
     for (const t of region) {
       const cx = t % WORLD_TW, cy = (t / WORLD_TW) | 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      for (let k = 0; k < 4; k++) {
+        const dx = DX4[k], dy = DY4[k];
         const run: number[] = [];
         for (let k = 1; k <= 7; k++) {
           const nx = cx + dx * k, ny = cy + dy * k;

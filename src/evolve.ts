@@ -7,7 +7,7 @@
 // The same module owns the per-visit pushstone offer: a seeded coin flip,
 // then placement at the crossing where a ford would save the longest detour.
 
-import { Tl, SOLID, WORLD_TW, WORLD_TH, Vec, DMG_CFG } from './defs';
+import { Tl, SOLID, SOLID_LUT, DX4, DY4, WORLD_TW, WORLD_TH, Vec, DMG_CFG } from './defs';
 import { floodFrom, mulberry32, pushSlideTiles } from './map';
 
 const W = WORLD_TW, H = WORLD_TH;
@@ -92,7 +92,7 @@ export function evolveTiles(tiles: Uint8Array, mapName: string, gen: number): vo
   const solid8 = (x: number, y: number): number => {
     let n = 0;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      if ((dx || dy) && SOLID.has(at(x + dx, y + dy))) n++;
+      if ((dx || dy) && SOLID_LUT[at(x + dx, y + dy)]) n++;
     }
     return n;
   };
@@ -300,16 +300,18 @@ interface Site { ax: number; ay: number; dx: number; dy: number; score: number }
 
 function distField(tiles: Uint8Array, sx: number, sy: number): Int32Array {
   const d = new Int32Array(W * H).fill(-1);
-  const q = [sy * W + sx];
+  const q = new Int32Array(W * H);
+  let head = 0, tail = 0;
+  q[tail++] = sy * W + sx;
   d[q[0]] = 0;
-  for (let qi = 0; qi < q.length; qi++) {
-    const cur = q[qi];
+  while (head < tail) {
+    const cur = q[head++];
     const cx = cur % W, cy = (cur / W) | 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const nx = cx + dx, ny = cy + dy;
+    for (let k = 0; k < 4; k++) {
+      const nx = cx + DX4[k], ny = cy + DY4[k];
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const ni = ny * W + nx;
-      if (d[ni] < 0 && !SOLID.has(tiles[ni])) { d[ni] = d[cur] + 1; q.push(ni); }
+      if (d[ni] < 0 && !SOLID_LUT[tiles[ni]]) { d[ni] = d[cur] + 1; q[tail++] = ni; }
     }
   }
   return d;
@@ -372,7 +374,8 @@ export function placePushstone(tiles: Uint8Array, rng: () => number): void {
     const q = [i]; comp[i] = nComp;
     for (let qi = 0; qi < q.length; qi++) {
       const cx = q[qi] % W, cy = (q[qi] / W) | 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      for (let k = 0; k < 4; k++) {
+        const dx = DX4[k], dy = DY4[k];
         const ni = (cy + dy) * W + cx + dx;
         if (cx + dx >= 0 && cy + dy >= 0 && cx + dx < W && cy + dy < H
           && tiles[ni] === Tl.WATER && comp[ni] < 0) { comp[ni] = nComp; q.push(ni); }

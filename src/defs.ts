@@ -31,6 +31,15 @@ export const SOLID = new Set<number>([
   Tl.STUMP, Tl.CRACK, Tl.BURN,
 ]);
 
+// Hot-path companions to SOLID and the 4-neighbour walk. Every flood fill and
+// BFS in the codebase visits thousands of nodes; a `[[1,0],...] as const`
+// literal costs five allocations per node and `SOLID.has()` a hashed lookup,
+// where an indexed read is near-free. Keep SOLID_LUT in sync with SOLID.
+export const DX4 = [1, -1, 0, 0] as const;
+export const DY4 = [0, 0, 1, -1] as const;
+export const SOLID_LUT = new Uint8Array(32);
+for (const t of SOLID) SOLID_LUT[t] = 1;
+
 // Pushstone tuning — mutable at runtime (window.__push) for playtesting.
 export const PUSH_CFG = {
   holdSecs: 4,    // sustained push required before the stone gives

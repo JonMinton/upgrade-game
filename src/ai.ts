@@ -1,6 +1,9 @@
 // Kernagh's brain: forage -> ritual -> intercept -> flee, with BFS pathfinding.
 
-import { Game, Vec, TILE, WORLD_TW, WORLD_TH, SHARDS_PER_UPGRADE, WIN_TIER, inSafe } from './defs';
+import {
+  Game, Vec, TILE, WORLD_TW, WORLD_TH, SHARDS_PER_UPGRADE, WIN_TIER, inSafe,
+  SOLID_LUT, DX4, DY4,
+} from './defs';
 import { solidTile, moveEnt, blocksBolt } from './map';
 
 const N = WORLD_TW * WORLD_TH;
@@ -32,11 +35,11 @@ function nearestPointByPath(g: Game, sx: number, sy: number, maxDepth: number, p
     if (hit) return hit;
     if (depth[cur] >= maxDepth) continue;
     const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const nx = cx + dx, ny = cy + dy;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DX4[d], ny = cy + DY4[d];
       if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
       const ni = ny * WORLD_TW + nx;
-      if (seen[ni] === stamp || solidTile(w, nx, ny)) continue;
+      if (seen[ni] === stamp || SOLID_LUT[w.tiles[ni]]) continue;
       seen[ni] = stamp;
       depth[ni] = depth[cur] + 1;
       queue[tail++] = ni;
@@ -68,11 +71,11 @@ function bfs(g: Game, sx: number, sy: number, tx: number, ty: number): Vec[] {
     const cur = queue[head++];
     if (cur === goal) break;
     const cx = cur % WORLD_TW, cy = (cur / WORLD_TW) | 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const nx = cx + dx, ny = cy + dy;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DX4[d], ny = cy + DY4[d];
       if (nx < 0 || ny < 0 || nx >= WORLD_TW || ny >= WORLD_TH) continue;
       const ni = ny * WORLD_TW + nx;
-      if (seen[ni] === stamp || solidTile(w, nx, ny)) continue;
+      if (seen[ni] === stamp || SOLID_LUT[w.tiles[ni]]) continue;
       seen[ni] = stamp;
       prev[ni] = cur;
       queue[tail++] = ni;
