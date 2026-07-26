@@ -8,6 +8,7 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         editor: fileURLToPath(new URL('./editor.html', import.meta.url)),
+        assets: fileURLToPath(new URL('./assets.html', import.meta.url)),
       },
     },
   },
