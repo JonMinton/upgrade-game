@@ -282,7 +282,9 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
     const sy = quantPos(e.y - AVA_YOFF, e.tier) - camY;
     if (sx < -16 || sy < -16 || sx > SCR_W || sy > SCR_H) continue;
     if (invisible(g, e)) continue;
-    if (e.tier >= 3) { direct.push({ e, sx: Math.round(e.x) - 8, sy: Math.round(e.y) - AVA_YOFF }); continue; }
+    // floor, not round: rounding up can draw the boot soles (sy+15) a pixel
+    // past the collision box's bottom edge and into a solid tile below.
+    if (e.tier >= 3) { direct.push({ e, sx: Math.round(e.x) - 8, sy: Math.floor(e.y) - AVA_YOFF }); continue; }
     if (e.tier === 2) { overdraw.push({ e, sx, sy: sy - entBob(e) }); continue; }
     stampMask16(sx, sy, wizMask(e.facing, e.tier === 0 ? 0 : entFrame(e)));
     if (envTier >= 1) {
@@ -640,7 +642,9 @@ function directRender(c: CanvasRenderingContext2D, g: Game, envTier: number): vo
       const sy = quantPos(e.y - AVA_YOFF, e.tier) - camY;
       if (sx > -18 && sy > -18 && sx < SCR_W + 2 && sy < SCR_H + 2) drawAvatarBlocky(c, e, sx, Math.round(sy));
     } else {
-      const sx = Math.round(e.x - 8 - camX), sy = Math.round(e.y - AVA_YOFF - camY);
+      // floor, not round: see the AVA_YOFF note — soles must stay at/inside
+      // the collision box's bottom edge, never a pixel past it.
+      const sx = Math.round(e.x - 8 - camX), sy = Math.floor(e.y - AVA_YOFF - camY);
       if (sx > -18 && sy > -18 && sx < SCR_W + 2 && sy < SCR_H + 2) drawAvatarDirect(c, e, sx, sy);
     }
   }
