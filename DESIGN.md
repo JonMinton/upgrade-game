@@ -328,18 +328,22 @@ increasingly rich stereo samples as he pulls ahead.
   a small chance (7%) of igniting it: the tree burns for ~4.5s (animated at
   every tier), with a low chance per tick of the fire creeping to adjacent
   trees (capped at 12 simultaneous blazes; the safe home screens never burn),
-  then falls to a **burnt stump** (solid). An icewand bolt that dies on a
-  standing stone has a 6% chance of frost-splitting it into **cracked rock**
-  (solid). Tuning knobs live on `window.__dmg`.
+  then falls to a **burnt stump** (solid). An icewand bolt that dies on stone
+  has a 6% chance of frost-splitting it — an ordinary rock into a **split
+  boulder** (solid, weathers like any scar: the intended fire↔trees /
+  ice↔rocks symmetry), a standing stone into **cracked stone** (solid and
+  permanent — see below). Tuning knobs live on `window.__dmg`.
 - **Scars persist and weather.** Each map keeps a damage ledger
   (`upgrade-dmg-<MAP>` in localStorage, tile index → tile). On every
   completed game the ledger weathers once with seeded rolls: stumps mostly
   remain (70%), decay to earth (23%) or resolve into a **pushstone** (7%);
-  cracked rock remains (60%), crumbles to ruin (15%) or earth (20%), or
-  becomes a pushstone (5%); ruins — scarred or generator-grown, via a new CA
+  split boulders remain (60%), crumble to ruin (15%) or earth (20%), or
+  become a pushstone (5%); ruins — scarred or generator-grown, via a new CA
   rule — slump to earth slowly (3%). Earth and pushstones rest where they
-  lie. On load, solid scars are individually skipped if stamping them would
-  cut any POI off. Chaos maps neither load nor save the ledger.
+  lie, and **cracked standing stones never weather at all**: combat near the
+  circle scars it obdurately, permanent testimony to old battles. On load,
+  solid scars are individually skipped if stamping them would cut any POI
+  off. Chaos maps neither load nor save the ledger.
 - **Stones can be hauled.** Standing next to any stone (pushstone, rock,
   standing stone, cracked rock) and holding FIRE plus the direction directly
   away from it drags it: the wizard trudges at quarter speed (pushstone) or

@@ -22,13 +22,14 @@ export const Tl = {
   RUIN: 16,   // crumbled masonry: solid, but grown in broken runs
   PUSH: 17,   // pushstone: shoved into a river (sustained push), it fords it
   STUMP: 18,  // burnt stump: what a tree leaves when fire takes it
-  CRACK: 19,  // cracked rock: a standing stone split by icewand frost
+  CRACK: 19,  // cracked stone: a standing stone split by icewand frost (permanent)
   BURN: 20,   // tree on fire: transient, in-game only (never persisted as-is)
+  CLEFT: 21,  // split boulder: an ordinary rock frost-split by icewand
 } as const;
 
 export const SOLID = new Set<number>([
   Tl.TREE, Tl.WATER, Tl.WALL, Tl.ROCK, Tl.STONE, Tl.WELL, Tl.HUT, Tl.RUIN, Tl.PUSH,
-  Tl.STUMP, Tl.CRACK, Tl.BURN,
+  Tl.STUMP, Tl.CRACK, Tl.BURN, Tl.CLEFT,
 ]);
 
 // Hot-path companions to SOLID and the 4-neighbour walk. Every flood fill and
@@ -53,7 +54,7 @@ export const PUSH_CFG = {
 // direction directly away from an adjacent stone. Pushstones are the
 // heaviest; ordinary rock and standing stones (cracked or whole) drag a
 // little faster.
-export const DRAGGABLE = new Set<number>([Tl.PUSH, Tl.ROCK, Tl.STONE, Tl.CRACK]);
+export const DRAGGABLE = new Set<number>([Tl.PUSH, Tl.ROCK, Tl.STONE, Tl.CRACK, Tl.CLEFT]);
 
 // Combat scarring — mutable at runtime (window.__dmg) for playtesting.
 // In-game: bolts occasionally deform what they strike. Between games: the
@@ -62,8 +63,10 @@ export const DMG_CFG = {
   igniteP: 0.07,     // firewand bolt on a tree -> it catches
   spreadP: 0.02,     // per burning tree, per neighbour tree, per half-second
   burnSecs: 4.5,     // how long a tree burns before falling to stump
-  crackP: 0.06,      // icewand bolt on a standing stone -> it splits
+  crackP: 0.06,      // icewand bolt on a rock or standing stone -> it splits
   stumpStay: 0.70, stumpPush: 0.07,                     // rest decays to earth
+  // Split boulders (CLEFT) weather by these rates; cracked standing stones
+  // (CRACK) never weather at all — the circle keeps its battle scars.
   crackStay: 0.60, crackRuin: 0.15, crackPush: 0.05,    // rest decays to earth
   ruinCrumble: 0.03,   // ruins (grown or scarred) slump to earth, slowly
 };
@@ -113,6 +116,7 @@ TILE_ATTR[Tl.PUSH] = [11, 0];   // bright magenta: the one stone that isn't ston
 TILE_ATTR[Tl.STUMP] = [7, 0];   // charcoal-grey remains of a burnt tree
 TILE_ATTR[Tl.CRACK] = [7, 0];   // a split menhir loses its BRIGHT
 TILE_ATTR[Tl.BURN] = [10, 0];   // bright red base; render flickers it yellow
+TILE_ATTR[Tl.CLEFT] = [7, 0];   // a split boulder: rock-grey, like its whole kin
 
 // C64 palette (Pepto's measured VIC-II values). The VIC-II fixed the chroma
 // amplitude in hardware, so nothing on a C64 was ever fully saturated —

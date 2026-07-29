@@ -187,15 +187,16 @@ export function evolveTo(tiles: Uint8Array, mapName: string, gen: number): void 
 
 // --- The damage ledger: combat scars that outlive the game that made them.
 //
-// Burnt stumps and cracked rock earned in play are stored per map (tile
+// Burnt stumps and split stone earned in play are stored per map (tile
 // index -> tile) and stamped onto the freshly evolved valley each new game.
 // At every completed game the whole ledger weathers once, with seeded rolls:
 // stumps mostly persist, sometimes decay to earth, rarely resolve into a
-// pushstone; cracked rock persists, converts to ruin or earth, or — rarely —
-// a pushstone; ruins slump to earth; earth heals out of the ledger entirely,
-// and pushstones rest where they lie (capped — see PUSH_CAP).
+// pushstone; split boulders persist, convert to ruin or earth, or — rarely —
+// a pushstone; ruins slump to earth; earth heals out of the ledger entirely.
+// Pushstones and cracked standing stones never weather: the valley keeps its
+// levers (capped — see PUSH_CAP), and the circle keeps its battle scars.
 
-const DMG_SOLID = new Set<number>([Tl.STUMP, Tl.CRACK, Tl.RUIN, Tl.PUSH]);
+const DMG_SOLID = new Set<number>([Tl.STUMP, Tl.CRACK, Tl.RUIN, Tl.PUSH, Tl.CLEFT]);
 
 export function loadDamage(mapName: string): Record<string, number> {
   try {
@@ -254,13 +255,15 @@ export function saveDamage(mapName: string, fresh: Record<number, number>): void
     let nt = t;
     if (t === Tl.STUMP) {
       nt = r < D.stumpStay ? Tl.STUMP : r < D.stumpStay + D.stumpPush ? Tl.PUSH : Tl.DIRT;
-    } else if (t === Tl.CRACK) {
-      nt = r < D.crackStay ? Tl.CRACK
+    } else if (t === Tl.CLEFT) {
+      nt = r < D.crackStay ? Tl.CLEFT
         : r < D.crackStay + D.crackRuin ? Tl.RUIN
         : r < D.crackStay + D.crackRuin + D.crackPush ? Tl.PUSH : Tl.DIRT;
     } else if (t === Tl.RUIN) {
       nt = r < D.ruinCrumble ? Tl.DIRT : Tl.RUIN;
     }
+    // No CRACK branch: a cracked standing stone is obdurate — it never
+    // weathers, and stands as permanent testimony to old battles.
     if (nt === Tl.DIRT) continue;   // healed: gone from the ledger
     if (nt === Tl.PUSH) pushes.push(k);
     next[k] = nt;

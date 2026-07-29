@@ -424,6 +424,17 @@ function drawTileDirect(
       c.beginPath(); c.ellipse(x + 4, y + 4.5, 3.4, 2.6, 0, 0, Math.PI * 2); c.fill();
       c.fillStyle = th.rockHi; c.fillRect(x + 2, y + 3, 2, 1);
       break;
+    case Tl.CLEFT: {
+      // A frost-split boulder: its whole kin's silhouette, fissured through.
+      c.fillStyle = th.rock;
+      c.beginPath(); c.ellipse(x + 4, y + 4.5, 3.4, 2.6, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = th.rockHi; c.fillRect(x + 2, y + 3, 2, 1);
+      c.fillStyle = tier === 3 ? C64.black : '#14161e';
+      c.fillRect(x + 4, y + 2, 1, 2);
+      c.fillRect(x + 3, y + 4, 1, 2);
+      c.fillRect(x + 4, y + 6, 1, 1);
+      break;
+    }
     case Tl.STONE:
       if (tier >= 4) {
         c.fillStyle = 'rgba(0,0,0,0.25)';

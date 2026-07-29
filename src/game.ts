@@ -156,7 +156,9 @@ function ignite(g: Game, tx: number, ty: number): void {
 }
 
 // A bolt that died on a solid tile may scar it: firewand kindles trees,
-// icewand frost-splits the standing stones.
+// icewand frost-splits stone — ordinary rocks into cleft boulders (which
+// weather like any scar), standing stones into cracked stone (which never
+// weathers: the circle keeps its battle scars forever).
 function scorch(g: Game, b: Bolt): void {
   const tx = Math.floor(b.x / TILE), ty = Math.floor(b.y / TILE);
   if (tx < 0 || ty < 0 || tx >= WORLD_TW || ty >= WORLD_TH) return;
@@ -164,13 +166,15 @@ function scorch(g: Game, b: Bolt): void {
   if (b.kind === 'fire' && t === Tl.TREE && Math.random() < DMG_CFG.igniteP) {
     ignite(g, tx, ty);
     if (onPlayerScreen(g, b.x, b.y)) msg(g, 'THE TREE TAKES FLAME');
-  } else if (b.kind === 'ice' && t === Tl.STONE && Math.random() < DMG_CFG.crackP) {
+  } else if (b.kind === 'ice' && (t === Tl.ROCK || t === Tl.STONE)
+    && Math.random() < DMG_CFG.crackP) {
     const i = ty * WORLD_TW + tx;
-    g.world.tiles[i] = Tl.CRACK;
-    g.dmg[i] = Tl.CRACK;
+    const nt = t === Tl.ROCK ? Tl.CLEFT : Tl.CRACK;
+    g.world.tiles[i] = nt;
+    g.dmg[i] = nt;
     g.fx.push({ x: tx * TILE + 4, y: ty * TILE + 4, t0: g.time, kind: 0 });
     relSfx(g, 'crack', g.player.tier, tx * TILE + 4, ty * TILE + 4);
-    if (onPlayerScreen(g, b.x, b.y)) msg(g, 'THE STONE SPLITS');
+    if (onPlayerScreen(g, b.x, b.y)) msg(g, t === Tl.ROCK ? 'THE ROCK SPLITS' : 'THE STONE SPLITS');
   }
 }
 

@@ -134,7 +134,8 @@ const FULL: Group[] = [
     title: 'SCARS & PUZZLE',
     rows: [
       { kind: 'tile', label: 'burnt stump', tile: Tl.STUMP },
-      { kind: 'tile', label: 'cracked stone', tile: Tl.CRACK },
+      { kind: 'tile', label: 'split boulder', tile: Tl.CLEFT },
+      { kind: 'tile', label: 'cracked stone', tile: Tl.CRACK, note: 'permanent' },
       { kind: 'tile', label: 'ruin', tile: Tl.RUIN },
       { kind: 'tile', label: 'pushstone', tile: Tl.PUSH, note: 'fords a river' },
     ],
