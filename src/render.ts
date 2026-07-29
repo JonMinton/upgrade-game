@@ -943,8 +943,8 @@ function drawEndOptions(
     return;
   }
   if (g.mode === 'win' && g.difficulty === 'easy') {
-    drawText(c, 'BUT THIS WAS THE EASY SIGNAL...',
-      Math.floor((CANVAS_W - textWidth('BUT THIS WAS THE EASY SIGNAL...')) / 2), y, fg);
+    drawText(c, 'BUT THAT WAS EASY MODE...',
+      Math.floor((CANVAS_W - textWidth('BUT THAT WAS EASY MODE...')) / 2), y, fg);
     if (Math.floor(time * 2) % 2 === 0) {
       drawText(c, 'ENTER - FACE THE TRUE KERNAGH',
         Math.floor((CANVAS_W - textWidth('ENTER - FACE THE TRUE KERNAGH')) / 2), y + 14, acc);
