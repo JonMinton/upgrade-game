@@ -165,6 +165,13 @@ function frozen(e: Ent): boolean {
 
 // ---------- avatars ----------
 
+// Vertical sprite anchor: the collision box is ±3px around (e.x, e.y), and the
+// view is 3/4-perspective, so the mask's boot soles (row 15) must sit on the
+// box's bottom edge — sy = e.y - 12 puts row 15 at e.y + 3. Drawn centred
+// (e.y - 8) the boots trail 4px below the box: they sink into any solid tile
+// approached from above and can never reach one approached from below.
+const AVA_YOFF = 12;
+
 function drawAvatarDirect(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: number): void {
   const bands: Bands = e.rival ? RIVAL_BANDS : PLAYER_BANDS;
   const m = wizMask(e.facing, entFrame(e));
@@ -272,10 +279,10 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
   const direct: { e: Ent; sx: number; sy: number }[] = [];
   for (const e of [g.player, g.rival]) {
     const sx = quantPos(e.x - 8, e.tier) - camX;
-    const sy = quantPos(e.y - 8, e.tier) - camY;
+    const sy = quantPos(e.y - AVA_YOFF, e.tier) - camY;
     if (sx < -16 || sy < -16 || sx > SCR_W || sy > SCR_H) continue;
     if (invisible(g, e)) continue;
-    if (e.tier >= 3) { direct.push({ e, sx: Math.round(e.x) - 8, sy: Math.round(e.y) - 8 }); continue; }
+    if (e.tier >= 3) { direct.push({ e, sx: Math.round(e.x) - 8, sy: Math.round(e.y) - AVA_YOFF }); continue; }
     if (e.tier === 2) { overdraw.push({ e, sx, sy: sy - entBob(e) }); continue; }
     stampMask16(sx, sy, wizMask(e.facing, e.tier === 0 ? 0 : entFrame(e)));
     if (envTier >= 1) {
@@ -339,7 +346,7 @@ function attrRender(c: CanvasRenderingContext2D, g: Game, envTier: number): void
   // Low-tier avatars' channel bars
   for (const e of [g.player, g.rival]) {
     if (e.tier <= 1 && e.channel > 0 && !invisible(g, e)) {
-      drawChannelBar(c, e, quantPos(e.x - 8, e.tier) - camX, quantPos(e.y - 8, e.tier) - camY,
+      drawChannelBar(c, e, quantPos(e.x - 8, e.tier) - camX, quantPos(e.y - AVA_YOFF, e.tier) - camY,
         envTier === 0 ? '#ffffff' : SPECTRUM[15]);
     }
   }
@@ -619,10 +626,10 @@ function directRender(c: CanvasRenderingContext2D, g: Game, envTier: number): vo
     if (invisible(g, e)) continue;
     if (e.tier <= 2) {
       const sx = quantPos(e.x - 8, e.tier) - camX;
-      const sy = quantPos(e.y - 8, e.tier) - camY;
+      const sy = quantPos(e.y - AVA_YOFF, e.tier) - camY;
       if (sx > -18 && sy > -18 && sx < SCR_W + 2 && sy < SCR_H + 2) drawAvatarBlocky(c, e, sx, Math.round(sy));
     } else {
-      const sx = Math.round(e.x - 8 - camX), sy = Math.round(e.y - 8 - camY);
+      const sx = Math.round(e.x - 8 - camX), sy = Math.round(e.y - AVA_YOFF - camY);
       if (sx > -18 && sy > -18 && sx < SCR_W + 2 && sy < SCR_H + 2) drawAvatarDirect(c, e, sx, sy);
     }
   }
@@ -1088,7 +1095,7 @@ export function render(c: CanvasRenderingContext2D, g: Game, time: number): void
   // Pushstone progress: same idiom as the channel bar, drawn over either
   // pipeline above the player's head.
   if (g.push) {
-    const sx = Math.round(g.player.x - g.camX) - 8, sy = Math.round(g.player.y - g.camY) - 10;
+    const sx = Math.round(g.player.x - g.camX) - 8, sy = Math.round(g.player.y - g.camY) - AVA_YOFF - 2;
     const fill = Math.floor(clamp(g.push.t / PUSH_CFG.holdSecs, 0, 1) * 16);
     c.fillStyle = '#000000';
     c.fillRect(sx, sy - 5, 16, 3);
