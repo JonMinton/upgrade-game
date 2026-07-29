@@ -207,12 +207,14 @@ function tick(now: number, draw = true): void {
     }
   };
 
+  // H arms/disarms hard mode rather than launching a game: the armed
+  // difficulty then applies to ANY start from the title — Enter (current
+  // map), C (chaos), or S (seeded chaos).
   if (hardPressed) {
     hardPressed = false;
     if (g.mode === 'title' && unlocked()) {
-      difficulty = 'hard';
-      g.difficulty = 'hard';
-      startPlay();
+      difficulty = difficulty === 'hard' ? 'easy' : 'hard';
+      g.difficulty = difficulty;
     }
   }
   if (chaosPressed) {

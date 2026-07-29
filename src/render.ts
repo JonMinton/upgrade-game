@@ -870,6 +870,10 @@ function renderTitle(c: CanvasRenderingContext2D, g: Game, time: number): void {
     drawText(c, shown || '_', Math.floor((CANVAS_W - textWidth(shown || '_', 2)) / 2), 100, SPECTRUM[14], 2);
     drawText(c, 'DIGITS THEN ENTER - ESC CANCELS',
       Math.floor((CANVAS_W - textWidth('DIGITS THEN ENTER - ESC CANCELS')) / 2), 124, SPECTRUM[7]);
+    if (g.difficulty === 'hard') {
+      drawText(c, 'HARD MODE ARMED',
+        Math.floor((CANVAS_W - textWidth('HARD MODE ARMED')) / 2), 140, SPECTRUM[10]);
+    }
     return;
   }
   drawText(c, 'UPGRADE', Math.floor((CANVAS_W - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
@@ -894,8 +898,12 @@ function renderTitle(c: CanvasRenderingContext2D, g: Game, time: number): void {
   let hardUnlocked = false;
   try { hardUnlocked = localStorage.getItem('upgrade-hard-unlocked') === '1'; } catch { /* private mode */ }
   if (hardUnlocked) {
-    drawText(c, 'H FOR HARD - S FOR SEEDED CHAOS',
-      Math.floor((CANVAS_W - textWidth('H FOR HARD - S FOR SEEDED CHAOS')) / 2), 143, SPECTRUM[10]);
+    const armed = g.difficulty === 'hard';
+    const line = armed
+      ? 'HARD MODE ARMED - H FOR EASY - S FOR SEEDED CHAOS'
+      : 'H FOR HARD - S FOR SEEDED CHAOS';
+    drawText(c, line, Math.floor((CANVAS_W - textWidth(line)) / 2), 143,
+      SPECTRUM[armed && Math.floor(time * 2) % 2 ? 15 : 10]);
   }
   const step = Math.floor(time) % CREDIT_YEARS.length;
   const credit = `JON FABLETON (C) ${CREDIT_YEARS[step]}`;
