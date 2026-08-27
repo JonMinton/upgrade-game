@@ -361,6 +361,28 @@ increasingly rich stereo samples as he pulls ahead.
   of Signals and unlocks are the player's, not the valley's, and survive).
   ESC is the only way back.
 
+### No passive regen; Kernagh gets bored (2026-08-27)
+
+- **Passive health regen removed.** Both wizards silently gained 1 ♥ every
+  12 s, with a timer that never reset on damage — hits often appeared to
+  undo themselves moments later. Not a mechanic of the era; berries (and
+  the derez reset) are now the only way hearts come back.
+- **Boredom.** Kernagh used to park on a shrine for an 18 s clock slot
+  waiting for it to refill, and freeze solid for the post-pickup dawdle —
+  optimal-ish, but it read as a bot, and it shipped a real bug: two equally
+  fresh shrines could flip-flop his target every tick and pin him in place.
+  Now: his patrol is memory-driven (walk to the shrine he has not stood on
+  for longest, commit to it), on arrival he lingers only until *bored*
+  (~5 s easy / ~10 s hard — lingering is honest play on hard, just not
+  indefinite), then potters off to a random nearby tile; on hard, ~1 in 3
+  boredom ticks send him toward the player's last position instead. The
+  dawdle after a pickup is now a potter, not a statue.
+- Idle-player sim (12 games, headless): loss at ~7.5 min easy / ~6.3 min
+  hard (was 7.65 / 6.7); time Kernagh spends stationary outside rituals
+  drops from ~35% to ~12%, longest non-ritual stand from ~16 s to the
+  boredom cap; time within 200 px of the player roughly triples
+  (4% → 12% easy, 6.5% → 16% hard).
+
 ## Future work
 
 - **Server-backed Hall of Signals.** localStorage is per-browser; the plan:

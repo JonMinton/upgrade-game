@@ -223,6 +223,10 @@ export interface RivalAI {
   lastX: number; lastY: number; stuck: number; targetKey: string;
   interceptT: number; coolUntil: number; pauseUntil: number;
   nearT: number;   // continuous time spent close to the player (encounter cap)
+  bored: number;   // seconds spent idling with nothing to do; drains while walking
+  visited: number[];  // per shrine: last game time he stood on it (patrol memory)
+  wander: Vec | null; // pottering destination while dawdling or bored
+  patrol: number;     // shrine index he has committed to walking to (-1 none)
 }
 
 export type Difficulty = 'easy' | 'hard';

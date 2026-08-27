@@ -73,6 +73,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number 
     ai: {
       state: 'forage', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
       targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0, nearT: 0,
+      bored: 0, visited: world.shrines.map(() => -999), wander: null, patrol: -1,
     },
     camX: 0, camY: SCR_H * 3,
     hinted3: false, endTime: 0, loseWhy: 'race', winWhy: 'transcend', winTier: WIN_TIER,

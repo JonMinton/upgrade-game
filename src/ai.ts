@@ -110,6 +110,39 @@ function berryTarget(g: Game): Vec | null {
   return nearestPointByPath(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), 20, active);
 }
 
+// A short potter: a random walkable tile a few tiles off, never in a safe
+// screen. Kernagh uses this instead of standing still when he has time to
+// kill — a statue reads as a bot; a wizard poking about the bushes does not.
+function potterSpot(g: Game): Vec | null {
+  const r = g.rival;
+  const tx0 = Math.floor(r.x / TILE), ty0 = Math.floor(r.y / TILE);
+  for (let tries = 0; tries < 12; tries++) {
+    const tx = tx0 + Math.floor(Math.random() * 13) - 6;
+    const ty = ty0 + Math.floor(Math.random() * 13) - 6;
+    if (tx < 1 || ty < 1 || tx >= WORLD_TW - 1 || ty >= WORLD_TH - 1) continue;
+    if (Math.abs(tx - tx0) + Math.abs(ty - ty0) < 3) continue;
+    if (solidTile(g.world, tx, ty)) continue;
+    const x = tx * TILE + 4, y = ty * TILE + 4;
+    if (inSafe(g.world, x, y)) continue;
+    return { x, y };
+  }
+  return null;
+}
+
+// The shrine he has not stood on for longest (ties broken by straight-line
+// distance). Replaces a clock-driven patrol that parked him on one shrine
+// for 18 s at a time.
+function stalestShrine(g: Game): number {
+  const r = g.rival, ai = g.ai;
+  let best = 0, bestT = Infinity, bestD = Infinity;
+  g.world.shrines.forEach((sh, i) => {
+    const t = ai.visited[i] ?? -999;
+    const d = Math.hypot(sh.x * TILE + 4 - r.x, sh.y * TILE + 4 - r.y);
+    if (t < bestT || (t === bestT && d < bestD)) { best = i; bestT = t; bestD = d; }
+  });
+  return best;
+}
+
 // Chase only when it's genuinely threatening — not a standing stalk order.
 // In easy mode he only contests the endgame and nearby rituals.
 function interceptWorthwhile(g: Game, distP: number): boolean {
@@ -144,13 +177,23 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
   const nearAltar = Math.hypot(r.x - g.world.altarX, r.y - g.world.altarY) < 24;
   if (r.shards >= SHARDS_PER_UPGRADE && nearAltar) { ai.state = 'ritual'; return; }
 
-  // Post-pickup dawdle (skipped in emergencies or when the player is close).
-  if (g.time < ai.pauseUntil && r.hp > 1 && g.player.tier < WIN_TIER && distP > 200) return;
+  // Remember which shrines he has recently stood on.
+  g.world.shrines.forEach((sh, i) => {
+    if (Math.hypot(sh.x * TILE + 4 - r.x, sh.y * TILE + 4 - r.y) < 12) ai.visited[i] = g.time;
+  });
 
   // Pick target
   let target: Vec | null = null;
   let key = '';
-  if (r.hp <= 1 && distP < 300) {
+  const dawdling = g.time < ai.pauseUntil && r.hp > 1 && g.player.tier < WIN_TIER && distP > 200;
+  if (!dawdling && ai.state === 'potter') ai.wander = null;   // dawdle over: forget the potter spot
+  if (dawdling) {
+    // Post-pickup dawdle: potter about rather than stand on the empty shrine.
+    ai.state = 'potter';
+    if (!ai.wander || Math.hypot(ai.wander.x - r.x, ai.wander.y - r.y) < 6) ai.wander = potterSpot(g);
+    target = ai.wander;
+    key = target ? `w${target.x | 0},${target.y | 0}` : '';
+  } else if (r.hp <= 1 && distP < 300) {
     ai.state = 'flee';
     target = { x: r.homeX, y: r.homeY };
     key = 'home';
@@ -181,11 +224,24 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
     if (found) {
       target = { x: found.x, y: found.y };
       key = `s${found.x | 0},${found.y | 0}`;
+    } else if (ai.wander) {
+      // Bored: off to look at something else (or someone else).
+      target = ai.wander;
+      key = `w${target.x | 0},${target.y | 0}`;
+      if (Math.hypot(target.x - r.x, target.y - r.y) < 6) ai.wander = null;
     } else {
-      const idx = Math.floor(g.time / 18) % g.world.shrines.length;
-      const sh = g.world.shrines[idx];
-      target = { x: sh.x * TILE + 4, y: sh.y * TILE + 4 };
-      key = 'patrol' + idx;
+      // Commit to one patrol shrine until reached (or bored): re-choosing
+      // every tick lets two equally stale shrines flip-flop him in place.
+      if (ai.patrol < 0) ai.patrol = stalestShrine(g);
+      const sh = g.world.shrines[ai.patrol];
+      const sx = sh.x * TILE + 4, sy = sh.y * TILE + 4;
+      if (Math.hypot(sx - r.x, sy - r.y) < 6) {
+        // Arrived: linger a while (boredom decides how long), then move on.
+        target = null; key = 'wait' + ai.patrol;
+      } else {
+        target = { x: sx, y: sy };
+        key = 'patrol' + ai.patrol;
+      }
     }
   }
 
@@ -200,6 +256,31 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
     ai.targetKey = key;
     ai.repath = (key === 'player' ? 0.4 : 0.8) * (g.difficulty === 'easy' ? 2.2 : 1);
     ai.stuck = 0;
+  }
+
+  // Boredom: a wizard with nothing to do does not stand on a shrine waiting
+  // for it to refill. Idling in forage/potter accrues boredom; walking drains
+  // it. Past the threshold he marks this spot as seen and goes elsewhere —
+  // on hard, sometimes to see what the player is up to. Hard mode tolerates
+  // a longer wait: lingering on a shrine is genuinely good play, it just
+  // must not be indefinite.
+  const idling = (ai.state === 'forage' || ai.state === 'potter') && moved < 1;
+  ai.bored = idling ? ai.bored + dt : Math.max(0, ai.bored - dt * 2);
+  if (ai.bored > (g.difficulty === 'easy' ? 5 : 10)) {
+    ai.bored = 0;
+    ai.pauseUntil = 0;
+    ai.patrol = -1;
+    g.world.shrines.forEach((sh, i) => {
+      if (Math.hypot(sh.x * TILE + 4 - r.x, sh.y * TILE + 4 - r.y) < 40) ai.visited[i] = g.time;
+    });
+    const nosy = g.difficulty === 'hard' && g.time >= ai.coolUntil && !inSafe(g.world, p.x, p.y)
+      && Math.random() < 0.35;
+    ai.wander = nosy ? { x: p.x, y: p.y } : potterSpot(g);
+    if (ai.wander) {
+      target = ai.wander; key = `w${target.x | 0},${target.y | 0}`;
+      ai.path = bfs(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), Math.floor(target.x / TILE), Math.floor(target.y / TILE));
+      ai.pathI = 0; ai.targetKey = key; ai.stuck = 0;
+    }
   }
 
   // Follow path. Clamp each step to the waypoint distance so a large timestep

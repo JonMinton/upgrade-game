@@ -86,7 +86,7 @@ function makeGame(): Game {
     ripple: -1, rippleFrom: 1,
     ai: {
       state: '', path: [], pathI: 0, repath: 0, lastX: 0, lastY: 0, stuck: 0,
-      targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0, nearT: 0,
+      targetKey: '', interceptT: 0, coolUntil: 0, pauseUntil: 0, nearT: 0, bored: 0, visited: [], wander: null, patrol: -1,
     },
     camX: 0, camY: 0, hinted3: true, endTime: 0,
     loseWhy: 'race', winWhy: 'transcend', winTier: 5,
