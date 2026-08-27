@@ -68,7 +68,7 @@ function blankWorld(): World {
 function offEnt(rival: boolean): Ent {
   return {
     x: -1000, y: -1000, facing: 3, hp: 3, tier: 1, shards: 0,
-    cool: 0, channel: 0, inv: 0, regen: 0, stun: 0, wand: 'fire', onStation: false,
+    cool: 0, channel: 0, inv: 0, stun: 0, wand: 'fire', onStation: false,
     animDist: 0, stepAcc: 0, homeX: -1000, homeY: -1000, rival,
   };
 }

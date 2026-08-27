@@ -189,7 +189,7 @@ export type Wand = 'fire' | 'ice';
 export interface Ent {
   x: number; y: number; facing: number;   // 0 down 1 up 2 left 3 right
   hp: number; tier: number; shards: number;
-  cool: number; channel: number; inv: number; regen: number;
+  cool: number; channel: number; inv: number;
   stun: number;                 // frozen/staggered: no moving, no firing
   wand: Wand; onStation: boolean;
   animDist: number; stepAcc: number;

@@ -16,13 +16,12 @@ const SPEED = 64;
 const BOLT_SPEED = 150;
 const BOLT_LIFE = 0.9;
 const RESPAWN_EVERY = 19;
-const REGEN_EVERY = 12;
 const MAX_GROUND_SHARDS = 10;
 
 function makeEnt(x: number, y: number, rival: boolean): Ent {
   return {
     x, y, facing: 0, hp: 3, tier: START_TIER, shards: 0,
-    cool: 0, channel: 0, inv: 0, regen: 0,
+    cool: 0, channel: 0, inv: 0,
     stun: 0, wand: 'fire', onStation: false,
     animDist: 0, stepAcc: 0, homeX: x, homeY: y, rival,
   };
@@ -478,8 +477,6 @@ export function update(g: Game, inp: Input, dt: number): void {
     e.cool = Math.max(0, e.cool - dt);
     e.inv = Math.max(0, e.inv - dt);
     e.stun = Math.max(0, e.stun - dt);
-    e.regen += dt;
-    if (e.regen > REGEN_EVERY) { e.regen = 0; if (e.hp < 3) e.hp++; }
   }
 
   // --- Bolts
