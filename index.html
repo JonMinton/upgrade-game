@@ -15,8 +15,9 @@
       }
       #frame {
         position: relative;
-        width: min(100vw, calc(100vh * 4 / 3));
-        aspect-ratio: 4 / 3;
+        /* --ar is set by the renderer: 4:3 until T7 goes widescreen. */
+        width: min(100vw, calc(100vh * var(--ar, 1.3333)));
+        aspect-ratio: var(--ar, 1.3333);
       }
       canvas {
         display: block;

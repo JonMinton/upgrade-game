@@ -4,8 +4,11 @@ import {
   Game, Ent, Input, World, START_TIER, WIN_TIER, SHARDS_PER_UPGRADE, CHANNEL_TIME, FINAL_CHANNEL_TIME,
   FACING_VECS, TILE, SCR_W, SCR_H, inSafe, screenOf, clamp, WORLD_W, WORLD_H,
   FREEZE_TIME, STAGGER_TIME, WORLD_TW, WORLD_TH, Tl, PUSH_CFG, DMG_CFG, DRAGGABLE, Bolt,
-  DX4, DY4,
+  DX4, DY4, TIERS, tierViewW,
 } from './defs';
+import {
+  sxInit, sxUpdate, sxWell, sxParry, sxBolt, sxDerez, sxRitual, sxBonus, sxDawdle, sxFirePressed,
+} from './secrets';
 import { glenTiles, worldFromTiles, moveEnt, solidTile, blocksBolt, tileAt, pushSlide } from './map';
 import { ruleGenTiles } from './rulegen';
 import { evolveTo, placePushstone, visitCount, rngFor, applyDamage } from './evolve';
@@ -15,7 +18,7 @@ import { sfx, setMusicTier, SfxName } from './audio';
 const SPEED = 64;
 const BOLT_SPEED = 150;
 const BOLT_LIFE = 0.9;
-const RESPAWN_EVERY = 19;
+const RESPAWN_EVERY = 13;   // two more rungs on the ladder: the economy runs a little hotter
 const MAX_GROUND_SHARDS = 10;
 
 function makeEnt(x: number, y: number, rival: boolean): Ent {
@@ -87,6 +90,7 @@ export function newGame(difficulty: 'easy' | 'hard' = 'easy', chaosSeed: number 
     const s = world.shrines[i];
     if (s) g.shards.push({ x: s.x * TILE + 4, y: s.y * TILE + 4 });
   }
+  sxInit(g);
   return g;
 }
 
@@ -121,8 +125,9 @@ export function finalScore(g: Game): number {
   let s = g.maxTier * 150 + g.kills * 75;
   if (g.mode === 'win') {
     s += g.winWhy === 'transcend' ? 500 : 250;
-    s += Math.max(0, 600 - Math.floor(g.endTime));
+    s += Math.max(0, 780 - Math.floor(g.endTime));
   }
+  s += sxBonus(g);
   if (g.difficulty === 'hard') s *= 2;
   return s;
 }
@@ -233,6 +238,7 @@ function dropShards(g: Game, e: Ent): void {
 
 function derez(g: Game, e: Ent): void {
   g.fx.push({ x: e.x, y: e.y, t0: g.time, kind: 0 });
+  sxDerez(g, e);
   if (e.rival) g.kills++;
   // Derezzed at the very floor of history: that entity is finished.
   if (e.tier === 0) {
@@ -265,7 +271,7 @@ function pickups(g: Game, e: Ent): void {
       g.shards.splice(i, 1);
       e.shards++;
       relSfx(g, 'pickup', e.tier, s.x, s.y);
-      if (e.rival) g.ai.pauseUntil = g.time + (g.difficulty === 'easy' ? 9 : 5);  // he potters a while
+      if (e.rival) g.ai.pauseUntil = g.time + (g.difficulty === 'easy' ? 9 : 5) + sxDawdle(g);  // he potters a while
       if (!e.rival) {
         if (e.shards >= SHARDS_PER_UPGRADE && !g.hinted3) {
           g.hinted3 = true;
@@ -310,8 +316,9 @@ function ritual(g: Game, e: Ent, dt: number): void {
       e.shards = 0;
       g.fx.push({ x: g.world.altarX, y: g.world.altarY, t0: g.time, kind: 2 });
       relSfx(g, 'upgrade', e.tier, e.x, e.y);
+      if (sxRitual(g, e)) return;
       if (e.tier >= WIN_TIER) {
-        // The final upgrade: transcendence beyond 1995.
+        // The final upgrade: transcendence beyond the last rung of the ladder.
         g.mode = e.rival ? 'lose' : 'win';
         g.loseWhy = 'race';
         g.winWhy = 'transcend';
@@ -332,7 +339,7 @@ function ritual(g: Game, e: Ent, dt: number): void {
 }
 
 function tierName(t: number): string {
-  return ['1979 MONO', 'SPECTRUM 48K', 'SPECTRUM 128', 'C64', '16-BIT ST', 'AMIGA'][t];
+  return TIERS[t].name;
 }
 
 export function update(g: Game, inp: Input, dt: number): void {
@@ -376,7 +383,8 @@ export function update(g: Game, inp: Input, dt: number): void {
     if (p.stepAcc > 11) { p.stepAcc = 0; sfx('step', p.tier, 1); }
   }
   if (inp.fire && p.cool <= 0 && p.stun <= 0 && dragStone < 0) {
-    if (inSafe(g.world, p.x, p.y)) { sfx('deny', p.tier, 0.7); p.cool = 0.4; }
+    if (sxFirePressed(inp) && sxWell(g)) { /* the well answered */ }
+    else if (inSafe(g.world, p.x, p.y)) { sfx('deny', p.tier, 0.7); p.cool = 0.4; }
     else { const v = FACING_VECS[p.facing]; fire(g, p, v[0], v[1]); }
   }
 
@@ -481,9 +489,11 @@ export function update(g: Game, inp: Input, dt: number): void {
   }
 
   // --- Bolts
+  sxParry(g);
   for (let i = g.bolts.length - 1; i >= 0; i--) {
     const b = g.bolts[i];
     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    sxBolt(g, b);
     const gone = b.life <= 0 || blocksBolt(g.world, b.x, b.y) || inSafe(g.world, b.x, b.y);
     let hit = false;
     const victim = b.fromRival ? p : r;
@@ -511,6 +521,7 @@ export function update(g: Game, inp: Input, dt: number): void {
 
   // --- Fires burn down (and sometimes creep)
   updateBurns(g);
+  sxUpdate(g, inp);
 
   // --- Shards & berries: pickups + respawn
   pickups(g, p);
@@ -552,14 +563,20 @@ export function update(g: Game, inp: Input, dt: number): void {
     if (g.time - g.fx[i].t0 >= 1) g.fx.splice(i, 1);
   }
 
-  // --- Camera: snap at Spectrum tiers (flick-screen), slide at T3+
+  // --- Camera: snap at Spectrum tiers (flick-screen), slide at T3+, and at
+  // T7 let go of the screen grid altogether: a widescreen view that follows.
   const s = screenOf(p.x, p.y);
-  const txc = clamp(s.x * SCR_W, 0, WORLD_W - SCR_W);
-  const tyc = clamp(s.y * SCR_H, 0, WORLD_H - SCR_H);
+  let txc = clamp(s.x * SCR_W, 0, WORLD_W - SCR_W);
+  let tyc = clamp(s.y * SCR_H, 0, WORLD_H - SCR_H);
+  if (p.tier >= 7) {
+    const vw = tierViewW(p.tier);
+    txc = clamp(p.x - vw / 2, 0, WORLD_W - vw);
+    tyc = clamp(p.y - SCR_H / 2, 0, WORLD_H - SCR_H);
+  }
   if (p.tier <= 2) {
     g.camX = txc; g.camY = tyc;
   } else {
-    const k = Math.min(1, dt * 9);
+    const k = Math.min(1, dt * (p.tier >= 7 ? 5 : 9));
     g.camX += (txc - g.camX) * k;
     g.camY += (tyc - g.camY) * k;
     if (Math.abs(txc - g.camX) < 0.6) g.camX = txc;

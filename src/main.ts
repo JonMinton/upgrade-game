@@ -5,6 +5,7 @@ import { newGame, update, msg, finalScore } from './game';
 import { render } from './render';
 import { initAudio, setTitleMode, setMusicTier } from './audio';
 import { qualifies, addScore, cycleMapFilter } from './hiscores';
+import { sxEnd, sxKey, sxOpening } from './secrets';
 import { bumpVisit, visitCount, EVO_RATES, saveDamage, resetWorldState } from './evolve';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -52,6 +53,7 @@ const KEYMAP: Record<string, keyof Input> = {
 };
 
 window.addEventListener('keydown', e => {
+  sxKey(g, e.key);
   // Hi-score initials entry captures the keyboard entirely.
   if (g.entryActive) {
     if (/^[a-zA-Z0-9]$/.test(e.key) && g.entryName.length < 3) {
@@ -187,6 +189,7 @@ function tick(now: number, draw = true): void {
       bumpVisit(g.mapName);
       saveDamage(g.mapName, g.dmg);
     }
+    sxEnd(g);
     g.score = finalScore(g);
     if (g.mode !== 'void' && qualifies(g.score)) {
       g.entryActive = true;
@@ -201,9 +204,9 @@ function tick(now: number, draw = true): void {
     if (g.chaosSeed != null) {
       msg(g, `CHAOS MODE - SEED ${g.chaosSeed} - AN UNCHARTED VALLEY`, 4);
     } else {
-      msg(g, g.difficulty === 'hard'
+      msg(g, sxOpening(g) ?? (g.difficulty === 'hard'
         ? 'HARD MODE - THE TRUE KERNAGH AWAKENS'
-        : 'FIND THE SHARDS. KERNAGH SEEKS THEM TOO', 4);
+        : 'FIND THE SHARDS. KERNAGH SEEKS THEM TOO'), 4);
     }
   };
 
@@ -285,7 +288,7 @@ function tick(now: number, draw = true): void {
 
   update(g, input, dt);
   if (g.mode === 'title') setTitleMode(true);
-  if (g.mode === 'win') setMusicTier(5);
+  if (g.mode === 'win') setMusicTier(g.winWhy === 'transcend' ? 7 : g.winTier);
   if (g.mode === 'lose' || g.mode === 'void') setMusicTier(0);   // the Void is silent
   if (draw) render(ctx, g, now / 1000);
 }

@@ -285,7 +285,7 @@ export function resetWorldState(): void {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && (k.startsWith('upgrade-evo-') || k.startsWith('upgrade-dmg-')
-        || k.startsWith('upgrade-evocache-'))) doomed.push(k);
+        || k.startsWith('upgrade-evocache-') || k.startsWith('upgrade-vly-'))) doomed.push(k);
     }
     for (const k of doomed) localStorage.removeItem(k);
   } catch { /* private mode */ }

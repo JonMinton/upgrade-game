@@ -2,19 +2,25 @@
 //  - Attribute pipeline (env tiers 0-2): 1-bit bitmap + 8x8 attribute cells,
 //    with genuine colour clash at T1.
 //  - Direct pipeline (env tiers 3-5): full-colour canvas drawing.
+//  - PC pipeline (env tiers 6-7): hires.ts, above the 256x192 grid. This file
+//    owns the canvas: it resizes it to the tier being shown, sets the scale
+//    transform and font mode, and composites the upgrade ripple across sizes.
 // Avatars always render at their OWN tier, whatever the environment tier.
 
 import {
   Game, Ent, SCR_W, SCR_H, SCR_TW, SCR_TH, CANVAS_W, CANVAS_H, TILE, Tl, TIERS,
   SPECTRUM, C64, TILE_ATTR, THEME, Theme, PLAYER_BANDS, RIVAL_BANDS, Bands,
   PLAYER_INKS, RIVAL_INKS, BOLT_INK, SHARD_INK, CHANNEL_TIME, PUSH_CFG, clamp, screenOf,
+  HI_TIER, WIN_TIER, FINAL_CHANNEL_TIME, tierScale, tierViewW,
 } from './defs';
+import { hiresRender, drawHiAvatar, drawHudHi } from './hires';
+import { sxOverlay, sxTitleScreen, sxYears } from './secrets';
 import { tileAt } from './map';
 import {
   PATTERNS, GRASS_ALT, BOLT_PATS, shardPat, wizMask, bandOfRow,
   BERRY_DOTS, WAND_FIRE, WAND_ICE, SHARD_TAPE, BURN_TILE,
 } from './sprites';
-import { drawText, textWidth } from './font';
+import { drawText, textWidth, setFontMode } from './font';
 import { filteredScores, activeMapFilter } from './hiscores';
 
 // Pulsing diamond burst for T0 shard signalling (16x16).
@@ -28,6 +34,9 @@ const BURST = (() => {
   }
   return m;
 })();
+
+// Logical width of the canvas for the frame being drawn (256, or 320 at T7).
+let VW = CANVAS_W;
 
 const bmp = new Uint8Array(SCR_W * SCR_H);
 const inkA = new Uint8Array(SCR_TW * SCR_TH);
@@ -111,7 +120,7 @@ function overrideInk(px: number, py: number, w: number, h: number, ink: number):
 }
 
 function quantPos(v: number, tier: number): number {
-  const q = TIERS[Math.min(tier, 5)].quant;
+  const q = TIERS[tier].quant;
   return Math.floor(v / q) * q;
 }
 
@@ -173,6 +182,7 @@ function frozen(e: Ent): boolean {
 const AVA_YOFF = 12;
 
 function drawAvatarDirect(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: number): void {
+  if (e.tier >= HI_TIER) { drawHiAvatar(c, e, sx, sy); return; }
   const bands: Bands = e.rival ? RIVAL_BANDS : PLAYER_BANDS;
   const m = wizMask(e.facing, entFrame(e));
   const bob = entBob(e);
@@ -200,8 +210,18 @@ function drawAvatarBlocky(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: n
   if (e.channel > 0) drawChannelBar(c, e, sx, sy, SPECTRUM[headInk]);
 }
 
+// Any wizard below the PC tiers, drawn into whatever world is on screen.
+export function drawLegacyAvatar(c: CanvasRenderingContext2D, e: Ent, camX: number, camY: number): void {
+  if (e.tier <= 2) {
+    drawAvatarBlocky(c, e, quantPos(e.x - 8, e.tier) - Math.round(camX), Math.round(quantPos(e.y - AVA_YOFF, e.tier) - camY));
+  } else {
+    drawAvatarDirect(c, e, Math.round(e.x - 8 - camX), Math.floor(e.y - AVA_YOFF - camY));
+  }
+}
+
 function drawChannelBar(c: CanvasRenderingContext2D, e: Ent, sx: number, sy: number, col: string): void {
-  const w = Math.floor((e.channel / CHANNEL_TIME) * 16);
+  const need = e.tier >= WIN_TIER ? FINAL_CHANNEL_TIME : CHANNEL_TIME;
+  const w = Math.floor(clamp(e.channel / need, 0, 1) * 16);
   c.fillStyle = '#000000';
   c.fillRect(sx, sy - 5, 16, 3);
   c.fillStyle = col;
@@ -537,6 +557,13 @@ function drawTileDirect(
       c.fillRect(x + 3 + ph, y + ph, 2, 2);
       break;
     }
+    case Tl.ICE: {
+      c.fillStyle = tier === 3 ? C64.white : '#d8ecfa'; c.fillRect(x, y, 8, 8);
+      c.fillStyle = tier === 3 ? C64.cyan : '#8cc0e8';
+      c.fillRect(x + ((wtx * 3) % 5), y + 2, 3, 1);
+      c.fillRect(x + ((wty * 5) % 4) + 2, y + 5, 2, 1);
+      break;
+    }
     case Tl.RUIN: {
       // Broken masonry: irregular courses with missing chunks.
       c.fillStyle = th.wallDark;
@@ -719,7 +746,7 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
   const envTier = g.player.tier;
   const col = hudColors(envTier);
   c.fillStyle = col.bg;
-  c.fillRect(0, SCR_H, CANVAS_W, CANVAS_H - SCR_H);
+  c.fillRect(0, SCR_H, VW, CANVAS_H - SCR_H);
   const p = g.player, r = g.rival;
   drawText(c, `YOU T${p.tier} ${TIERS[p.tier].name}`, 2, SCR_H + 2, col.fg);
   drawText(c, '♥'.repeat(p.hp), 122, SCR_H + 2, col.hp);
@@ -755,7 +782,7 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
 
   if (g.time < g.msgUntil && g.msg) {
     const wpx = textWidth(g.msg);
-    const x = Math.floor((CANVAS_W - wpx) / 2);
+    const x = Math.floor((VW - wpx) / 2);
     c.fillStyle = 'rgba(0,0,0,0.75)';
     c.fillRect(x - 3, 2, wpx + 6, 9);
     drawText(c, g.msg, x, 4, envTier === 0 ? '#ffffff' : col.acc);
@@ -765,7 +792,7 @@ function drawHUD(c: CanvasRenderingContext2D, g: Game): void {
   if (g.time < g.escArmUntil) {
     const qt = 'ESC AGAIN - TITLE SCREEN';
     const wpx = textWidth(qt);
-    const x = Math.floor((CANVAS_W - wpx) / 2);
+    const x = Math.floor((VW - wpx) / 2);
     c.fillStyle = 'rgba(0,0,0,0.85)';
     c.fillRect(x - 4, 13, wpx + 8, 10);
     drawText(c, qt, x, 15, envTier === 0 ? '#ffffff' : col.hp);
@@ -779,7 +806,7 @@ function borderStripes(c: CanvasRenderingContext2D, time: number): void {
     const col = SPECTRUM[[2, 6, 4, 5, 1, 3][Math.floor(y / 4 + time * 24) % 6] + 8];
     c.fillStyle = col;
     c.fillRect(0, y, 6, 4);
-    c.fillRect(CANVAS_W - 6, y, 6, 4);
+    c.fillRect(VW - 6, y, 6, 4);
   }
 }
 
@@ -796,15 +823,15 @@ function renderLoading(c: CanvasRenderingContext2D, g: Game, time: number): void
       col = SPECTRUM[h > 0.5 ? 9 : 14]; // blue/yellow data bursts
     }
     c.fillStyle = col;
-    c.fillRect(0, y, CANVAS_W, 2);
+    c.fillRect(0, y, VW, 2);
   }
   const B = 16;
   c.fillStyle = SPECTRUM[7];
-  c.fillRect(B, B, CANVAS_W - 2 * B, CANVAS_H - 2 * B);
+  c.fillRect(B, B, VW - 2 * B, CANVAS_H - 2 * B);
   drawText(c, 'PROGRAM: UPGRADE', B + 4, B + 6, '#000000');
   if (!pilot) {
     drawText(c, 'BYTES: UPGRADE', B + 4, B + 16, '#000000');
-    const w = Math.floor(((g.loadT - 1.2) / 1.8) * (CANVAS_W - 2 * B - 8));
+    const w = Math.floor(((g.loadT - 1.2) / 1.8) * (VW - 2 * B - 8));
     c.fillStyle = '#000000';
     c.fillRect(B + 4, CANVAS_H - B - 12, w, 4);
   }
@@ -813,9 +840,9 @@ function renderLoading(c: CanvasRenderingContext2D, g: Game, time: number): void
 // Guide screen: alternates with the title every 6 seconds.
 function renderGuide(c: CanvasRenderingContext2D, time: number): void {
   c.fillStyle = '#000000';
-  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  c.fillRect(0, 0, VW, CANVAS_H);
   borderStripes(c, time);
-  drawText(c, 'HOW TO PLAY', Math.floor((CANVAS_W - textWidth('HOW TO PLAY', 2)) / 2), 14, SPECTRUM[15], 2);
+  drawText(c, 'HOW TO PLAY', Math.floor((VW - textWidth('HOW TO PLAY', 2)) / 2), 14, SPECTRUM[15], 2);
   const rows: [() => void, string, string][] = [
     [() => drawPat(c, SHARD_TAPE, 40, 0, SPECTRUM[13], 2), 'GATHER 3 SHARDS', ''],
     [() => { drawPat(c, PATTERNS[Tl.STONE], 36, 0, SPECTRUM[15], 2); drawPat(c, PATTERNS[Tl.ALTAR], 46, 0, SPECTRUM[13]); },
@@ -839,23 +866,23 @@ function renderGuide(c: CanvasRenderingContext2D, time: number): void {
     y += 21;
   }
   if (Math.floor(time * 2) % 2 === 0) {
-    drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER')) / 2), 170, SPECTRUM[14]);
+    drawText(c, 'PRESS ENTER', Math.floor((VW - textWidth('PRESS ENTER')) / 2), 170, SPECTRUM[14]);
   }
 }
 
 // Hall of Signals: the persistent hi-score table, third screen in the cycle.
 function renderScoresScreen(c: CanvasRenderingContext2D, time: number): void {
   c.fillStyle = '#000000';
-  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  c.fillRect(0, 0, VW, CANVAS_H);
   borderStripes(c, time);
-  drawText(c, 'HALL OF SIGNALS', Math.floor((CANVAS_W - textWidth('HALL OF SIGNALS', 2)) / 2), 14, SPECTRUM[15], 2);
+  drawText(c, 'HALL OF SIGNALS', Math.floor((VW - textWidth('HALL OF SIGNALS', 2)) / 2), 14, SPECTRUM[15], 2);
   const filter = activeMapFilter();
   const fLabel = `MAP: ${filter ?? 'ALL'}`;
-  drawText(c, fLabel, Math.floor((CANVAS_W - textWidth(fLabel)) / 2), 30, SPECTRUM[13]);
+  drawText(c, fLabel, Math.floor((VW - textWidth(fLabel)) / 2), 30, SPECTRUM[13]);
   const scores = filteredScores();
   if (!scores.length) {
     drawText(c, 'NO SIGNALS RECORDED YET',
-      Math.floor((CANVAS_W - textWidth('NO SIGNALS RECORDED YET')) / 2), 80, SPECTRUM[7]);
+      Math.floor((VW - textWidth('NO SIGNALS RECORDED YET')) / 2), 80, SPECTRUM[7]);
   }
   scores.forEach((s, i) => {
     const col = i === 0 ? SPECTRUM[14] : i < 3 ? SPECTRUM[13] : SPECTRUM[15];
@@ -863,53 +890,53 @@ function renderScoresScreen(c: CanvasRenderingContext2D, time: number): void {
     const score = `${s.score}`.padStart(5, ' ');
     drawText(c, `${rank}  ${s.name}  ${score}  ${s.map.slice(0, 6)}`, 48, 44 + i * 13, col);
   });
-  drawText(c, 'M - FILTER BY MAP', Math.floor((CANVAS_W - textWidth('M - FILTER BY MAP')) / 2), 156, SPECTRUM[7]);
+  drawText(c, 'M - FILTER BY MAP', Math.floor((VW - textWidth('M - FILTER BY MAP')) / 2), 156, SPECTRUM[7]);
   if (Math.floor(time * 2) % 2 === 0) {
-    drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER')) / 2), 168, SPECTRUM[14]);
+    drawText(c, 'PRESS ENTER', Math.floor((VW - textWidth('PRESS ENTER')) / 2), 168, SPECTRUM[14]);
   }
 }
 
 // The credit year walks the tier ladder at 1 fps with cycling attributes.
-const CREDIT_YEARS = ['1979', '1982', '1986', '1987', '1990', '1995'];
-const CREDIT_ATTRS: [number, number][] = [[7, 0], [15, 1], [14, 2], [12, 0], [13, 3], [11, 0]];
+const CREDIT_YEARS = ['1979', '1982', '1986', '1987', '1990', '1995', '1997', '2007'];
+const CREDIT_ATTRS: [number, number][] = [[7, 0], [15, 1], [14, 2], [12, 0], [13, 3], [11, 0], [0, 5], [15, 0]];
 
 function renderTitle(c: CanvasRenderingContext2D, g: Game, time: number): void {
   c.fillStyle = '#000000';
-  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  c.fillRect(0, 0, VW, CANVAS_H);
   borderStripes(c, time);
   if (g.seedEntry !== null) {
-    drawText(c, 'UPGRADE', Math.floor((CANVAS_W - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
+    drawText(c, 'UPGRADE', Math.floor((VW - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
     drawText(c, 'SEEDED CHAOS - ENTER A SEED:',
-      Math.floor((CANVAS_W - textWidth('SEEDED CHAOS - ENTER A SEED:')) / 2), 84, SPECTRUM[13]);
+      Math.floor((VW - textWidth('SEEDED CHAOS - ENTER A SEED:')) / 2), 84, SPECTRUM[13]);
     const shown = g.seedEntry + (Math.floor(time * 3) % 2 === 0 && g.seedEntry.length < 6 ? '_' : '');
-    drawText(c, shown || '_', Math.floor((CANVAS_W - textWidth(shown || '_', 2)) / 2), 100, SPECTRUM[14], 2);
+    drawText(c, shown || '_', Math.floor((VW - textWidth(shown || '_', 2)) / 2), 100, SPECTRUM[14], 2);
     drawText(c, 'DIGITS THEN ENTER - ESC CANCELS',
-      Math.floor((CANVAS_W - textWidth('DIGITS THEN ENTER - ESC CANCELS')) / 2), 124, SPECTRUM[7]);
+      Math.floor((VW - textWidth('DIGITS THEN ENTER - ESC CANCELS')) / 2), 124, SPECTRUM[7]);
     if (g.difficulty === 'hard') {
       drawText(c, 'HARD MODE ARMED',
-        Math.floor((CANVAS_W - textWidth('HARD MODE ARMED')) / 2), 140, SPECTRUM[10]);
+        Math.floor((VW - textWidth('HARD MODE ARMED')) / 2), 140, SPECTRUM[10]);
     }
     return;
   }
-  drawText(c, 'UPGRADE', Math.floor((CANVAS_W - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
+  drawText(c, 'UPGRADE', Math.floor((VW - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
   const lines: [string, string][] = [
     ['ARROWS MOVE - SPACE FIRE', SPECTRUM[15]],
     ['FIRST TO THE FINAL UPGRADE WINS', SPECTRUM[14]],
   ];
   lines.forEach(([s, colr], i) => {
-    drawText(c, s, Math.floor((CANVAS_W - textWidth(s)) / 2), 80 + i * 12, colr);
+    drawText(c, s, Math.floor((VW - textWidth(s)) / 2), 80 + i * 12, colr);
   });
   if (time < (g.cheatMsgUntil ?? 0)) {
     drawText(c, 'ALL SIGNALS UNLOCKED',
-      Math.floor((CANVAS_W - textWidth('ALL SIGNALS UNLOCKED')) / 2), 106, SPECTRUM[Math.floor(time * 6) % 2 ? 13 : 14]);
+      Math.floor((VW - textWidth('ALL SIGNALS UNLOCKED')) / 2), 106, SPECTRUM[Math.floor(time * 6) % 2 ? 13 : 14]);
   }
   if (Math.floor(time * 2) % 2 === 0) {
-    drawText(c, 'PRESS ENTER', Math.floor((CANVAS_W - textWidth('PRESS ENTER', 2)) / 2), 118, SPECTRUM[14], 2);
+    drawText(c, 'PRESS ENTER', Math.floor((VW - textWidth('PRESS ENTER', 2)) / 2), 118, SPECTRUM[14], 2);
   }
   let crtUnlocked = false;
   try { crtUnlocked = localStorage.getItem('upgrade-crt-unlocked') === '1'; } catch { /* private mode */ }
   const chaosLine = 'C FOR CHAOS MODE' + (crtUnlocked ? ' - D FOR CRT' : '');
-  drawText(c, chaosLine, Math.floor((CANVAS_W - textWidth(chaosLine)) / 2), 134, SPECTRUM[11]);
+  drawText(c, chaosLine, Math.floor((VW - textWidth(chaosLine)) / 2), 134, SPECTRUM[11]);
   let hardUnlocked = false;
   try { hardUnlocked = localStorage.getItem('upgrade-hard-unlocked') === '1'; } catch { /* private mode */ }
   if (hardUnlocked) {
@@ -917,14 +944,14 @@ function renderTitle(c: CanvasRenderingContext2D, g: Game, time: number): void {
     const line = armed
       ? 'HARD MODE ARMED - H FOR EASY - S FOR SEEDED CHAOS'
       : 'H FOR HARD - S FOR SEEDED CHAOS';
-    drawText(c, line, Math.floor((CANVAS_W - textWidth(line)) / 2), 143,
+    drawText(c, line, Math.floor((VW - textWidth(line)) / 2), 143,
       SPECTRUM[armed && Math.floor(time * 2) % 2 ? 15 : 10]);
   }
-  const step = Math.floor(time) % CREDIT_YEARS.length;
+  const step = Math.floor(time) % sxYears(CREDIT_YEARS.length);
   const credit = `JON FABLETON (C) ${CREDIT_YEARS[step]}`;
   const [ink, paper] = CREDIT_ATTRS[step];
   const cw = textWidth(credit);
-  const cx = Math.floor((CANVAS_W - cw) / 2);
+  const cx = Math.floor((VW - cw) / 2);
   c.fillStyle = SPECTRUM[paper];
   c.fillRect(cx - 4, 152, cw + 8, 11);
   drawText(c, credit, cx, 155, SPECTRUM[ink]);
@@ -936,55 +963,55 @@ function drawEndOptions(
   c: CanvasRenderingContext2D, g: Game, time: number, acc: string, fg: string, y: number,
 ): void {
   const sc = `SCORE ${g.score}` + (g.chaosSeed != null ? ` - SEED ${g.chaosSeed}` : '');
-  drawText(c, sc, Math.floor((CANVAS_W - textWidth(sc)) / 2), y - 12, acc);
+  drawText(c, sc, Math.floor((VW - textWidth(sc)) / 2), y - 12, acc);
   if (g.entryActive) {
     drawText(c, 'A NEW SIGNAL FOR THE HALL - YOUR NAME:',
-      Math.floor((CANVAS_W - textWidth('A NEW SIGNAL FOR THE HALL - YOUR NAME:')) / 2), y + 4, fg);
+      Math.floor((VW - textWidth('A NEW SIGNAL FOR THE HALL - YOUR NAME:')) / 2), y + 4, fg);
     const shown = (g.entryName + (Math.floor(time * 3) % 2 === 0 && g.entryName.length < 3 ? '_' : ''))
       .padEnd(3, ' ');
-    drawText(c, shown.split('').join(' '), Math.floor((CANVAS_W - textWidth('A A A', 2)) / 2), y + 16, acc, 2);
-    drawText(c, 'A-Z THEN ENTER - ESC SKIPS', Math.floor((CANVAS_W - textWidth('A-Z THEN ENTER - ESC SKIPS')) / 2), y + 32, fg);
+    drawText(c, shown.split('').join(' '), Math.floor((VW - textWidth('A A A', 2)) / 2), y + 16, acc, 2);
+    drawText(c, 'A-Z THEN ENTER - ESC SKIPS', Math.floor((VW - textWidth('A-Z THEN ENTER - ESC SKIPS')) / 2), y + 32, fg);
     return;
   }
   if (g.mode === 'win' && g.difficulty === 'easy') {
     drawText(c, 'BUT THAT WAS EASY MODE...',
-      Math.floor((CANVAS_W - textWidth('BUT THAT WAS EASY MODE...')) / 2), y, fg);
+      Math.floor((VW - textWidth('BUT THAT WAS EASY MODE...')) / 2), y, fg);
     if (Math.floor(time * 2) % 2 === 0) {
       drawText(c, 'ENTER - FACE THE TRUE KERNAGH',
-        Math.floor((CANVAS_W - textWidth('ENTER - FACE THE TRUE KERNAGH')) / 2), y + 14, acc);
+        Math.floor((VW - textWidth('ENTER - FACE THE TRUE KERNAGH')) / 2), y + 14, acc);
     }
     drawText(c, 'SPACE - REST ON YOUR LAURELS',
-      Math.floor((CANVAS_W - textWidth('SPACE - REST ON YOUR LAURELS')) / 2), y + 26, fg);
+      Math.floor((VW - textWidth('SPACE - REST ON YOUR LAURELS')) / 2), y + 26, fg);
     drawText(c, 'ESC - TITLE SCREEN',
-      Math.floor((CANVAS_W - textWidth('ESC - TITLE SCREEN')) / 2), y + 38, fg);
+      Math.floor((VW - textWidth('ESC - TITLE SCREEN')) / 2), y + 38, fg);
   } else if (g.mode === 'win' && g.difficulty === 'hard') {
     // The hard-mode reward: full transcendence earns the epigraph, a partial
     // (elimination) win just the unlock line. Either way the flag is set.
     let yy = y;
-    if (g.winWhy !== 'elimination') {
+    if (g.winWhy === 'transcend') {
       drawText(c, 'YOU HAVE ASCENDED IN HARD MODE',
-        Math.floor((CANVAS_W - textWidth('YOU HAVE ASCENDED IN HARD MODE')) / 2), yy, fg);
+        Math.floor((VW - textWidth('YOU HAVE ASCENDED IN HARD MODE')) / 2), yy, fg);
       yy += 10;
       drawText(c, 'THE ONLY WAY UP IS BACK DOWN',
-        Math.floor((CANVAS_W - textWidth('THE ONLY WAY UP IS BACK DOWN')) / 2), yy, fg);
+        Math.floor((VW - textWidth('THE ONLY WAY UP IS BACK DOWN')) / 2), yy, fg);
       yy += 10;
     }
     drawText(c, '(CRT MODE UNLOCKED - PRESS D)',
-      Math.floor((CANVAS_W - textWidth('(CRT MODE UNLOCKED - PRESS D)')) / 2), yy, acc);
+      Math.floor((VW - textWidth('(CRT MODE UNLOCKED - PRESS D)')) / 2), yy, acc);
     yy += 12;
     if (Math.floor(time * 2) % 2 === 0) {
       drawText(c, 'ENTER TO PLAY AGAIN',
-        Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), yy, acc);
+        Math.floor((VW - textWidth('ENTER TO PLAY AGAIN')) / 2), yy, acc);
     }
     yy += 12;
     drawText(c, 'ESC - TITLE SCREEN',
-      Math.floor((CANVAS_W - textWidth('ESC - TITLE SCREEN')) / 2), yy, fg);
+      Math.floor((VW - textWidth('ESC - TITLE SCREEN')) / 2), yy, fg);
   } else {
     if (Math.floor(time * 2) % 2 === 0) {
-      drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((CANVAS_W - textWidth('ENTER TO PLAY AGAIN')) / 2), y + 8, acc);
+      drawText(c, 'ENTER TO PLAY AGAIN', Math.floor((VW - textWidth('ENTER TO PLAY AGAIN')) / 2), y + 8, acc);
     }
     drawText(c, 'ESC - TITLE SCREEN',
-      Math.floor((CANVAS_W - textWidth('ESC - TITLE SCREEN')) / 2), y + 20, fg);
+      Math.floor((VW - textWidth('ESC - TITLE SCREEN')) / 2), y + 20, fg);
   }
 }
 
@@ -992,16 +1019,16 @@ function drawEndOptions(
 // no fireworks, no colour — the game has nothing left to show them.
 function renderVoid(c: CanvasRenderingContext2D, time: number): void {
   c.fillStyle = '#000000';
-  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  c.fillRect(0, 0, VW, CANVAS_H);
   const dim = '#5a5a5a', dimmer = '#333333';
-  drawText(c, 'YOU FOUND THE VOID', Math.floor((CANVAS_W - textWidth('YOU FOUND THE VOID', 2)) / 2), 56, dim, 2);
+  drawText(c, 'YOU FOUND THE VOID', Math.floor((VW - textWidth('YOU FOUND THE VOID', 2)) / 2), 56, dim, 2);
   const lines = ['NOTHING.', 'NOTHING TO SEE. NOTHING TO DO.', 'THE CONFLICT IS OVER...'];
   lines.forEach((s, i) => {
-    drawText(c, s, Math.floor((CANVAS_W - textWidth(s)) / 2), 88 + i * 14, dimmer);
+    drawText(c, s, Math.floor((VW - textWidth(s)) / 2), 88 + i * 14, dimmer);
   });
   // The one concession: a way back, barely visible, blinking slowly.
   if (Math.floor(time) % 3 === 0) {
-    drawText(c, 'ESC', Math.floor((CANVAS_W - textWidth('ESC')) / 2), 158, dimmer);
+    drawText(c, 'ESC', Math.floor((VW - textWidth('ESC')) / 2), 158, dimmer);
   }
 }
 
@@ -1013,7 +1040,7 @@ function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: num
     const fg = t === 0 ? '#ffffff' : t <= 2 ? SPECTRUM[15] : THEME[t].hudFg;
     const acc = t === 0 ? '#ffffff' : t <= 2 ? SPECTRUM[14] : THEME[t].hudAccent;
     c.fillStyle = t >= 3 ? THEME[t].hudBg : '#000000';
-    c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    c.fillRect(0, 0, VW, CANVAS_H);
     if (t <= 2) {
       for (let i = 0; i < 12; i++) {
         if (hash(i, 6) > 0.4) {
@@ -1022,35 +1049,55 @@ function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: num
         }
       }
     }
-    drawText(c, 'KERNAGH IS NO MORE', Math.floor((CANVAS_W - textWidth('KERNAGH IS NO MORE', 2)) / 2), 38, fg, 2);
+    drawText(c, 'KERNAGH IS NO MORE', Math.floor((VW - textWidth('KERNAGH IS NO MORE', 2)) / 2), 38, fg, 2);
     drawText(c, 'A PARTIAL VICTORY - THE VALLEY FALLS SILENT',
-      Math.floor((CANVAS_W - textWidth('A PARTIAL VICTORY - THE VALLEY FALLS SILENT')) / 2), 64, acc);
+      Math.floor((VW - textWidth('A PARTIAL VICTORY - THE VALLEY FALLS SILENT')) / 2), 64, acc);
     const at = `YOU REMAIN AT T${t} ${TIERS[t].name}`;
-    drawText(c, at, Math.floor((CANVAS_W - textWidth(at)) / 2), 78, fg);
+    drawText(c, at, Math.floor((VW - textWidth(at)) / 2), 78, fg);
     const mins = Math.floor(g.endTime / 60), secs = Math.floor(g.endTime % 60);
     drawText(c, `TIME ${mins}:${secs < 10 ? '0' : ''}${secs}`,
-      Math.floor((CANVAS_W - textWidth('TIME 0:00')) / 2), 100, fg);
+      Math.floor((VW - textWidth('TIME 0:00')) / 2), 100, fg);
     drawEndOptions(c, g, time, acc, fg, 122);
     return;
   }
-  if (win) {
-    const th = THEME[5];
-    c.fillStyle = th.hudBg;
-    c.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    for (let i = 0; i < 40; i++) {
+  if (win && g.winWhy === 'circle') {
+    c.fillStyle = '#000000';
+    c.fillRect(0, 0, VW, CANVAS_H);
+    for (let i = 0; i < 48; i++) {
+      const a = i / 48 * Math.PI * 2 + time * 0.25;
+      if (Math.floor(i + time * 6) % 3) c.fillStyle = '#ffffff'; else continue;
+      c.fillRect(Math.floor((126 + Math.cos(a) * 120) / 4) * 4, Math.floor((94 + Math.sin(a) * 90) / 4) * 4, 4, 4);
+    }
+    drawText(c, 'FULL CIRCLE', Math.floor((VW - textWidth('FULL CIRCLE', 3)) / 2), 36, '#ffffff', 3);
+    for (const [i, ln] of ['THE ONLY WAY UP WAS BACK DOWN', 'EVERY YEAR AT ONCE - 1979 FOR EVER'].entries()) {
+      drawText(c, ln, Math.floor((VW - textWidth(ln)) / 2), 64 + i * 12, '#ffffff');
+    }
+  } else if (win) {
+    const th = THEME[WIN_TIER];
+    const bg = c.createLinearGradient(0, 0, 0, CANVAS_H);
+    bg.addColorStop(0, '#0a1030'); bg.addColorStop(0.6, '#241848'); bg.addColorStop(1, '#402050');
+    c.fillStyle = bg;
+    c.fillRect(0, 0, VW, CANVAS_H);
+    const halo = c.createRadialGradient(VW / 2, 46, 4, VW / 2, 46, 150);
+    halo.addColorStop(0, 'rgba(120,230,255,0.45)'); halo.addColorStop(1, 'rgba(120,230,255,0)');
+    c.fillStyle = halo;
+    c.fillRect(0, 0, VW, CANVAS_H);
+    for (let i = 0; i < 70; i++) {
       c.fillStyle = i % 2 ? th.altarGlow : th.shrineGlow;
-      c.globalAlpha = 0.3 + hash(i, 3) * 0.5;
-      c.fillRect(hash(i, 1) * CANVAS_W, (hash(i, 2) * CANVAS_H + time * (4 + i % 5)) % CANVAS_H, 2, 2);
+      c.globalAlpha = 0.25 + hash(i, 3) * 0.6;
+      c.beginPath();
+      c.arc(hash(i, 1) * VW, CANVAS_H - ((hash(i, 2) * CANVAS_H + time * (5 + i % 7)) % CANVAS_H), 0.4 + hash(i, 5) * 1.1, 0, Math.PI * 2);
+      c.fill();
     }
     c.globalAlpha = 1;
-    drawText(c, 'TRANSCENDENCE', Math.floor((CANVAS_W - textWidth('TRANSCENDENCE', 3)) / 2), 34, th.hudFg, 3);
-    drawText(c, 'THE FINAL UPGRADE - BEYOND 1995 ITSELF',
-      Math.floor((CANVAS_W - textWidth('THE FINAL UPGRADE - BEYOND 1995 ITSELF')) / 2), 64, th.hudAccent);
+    drawText(c, 'TRANSCENDENCE', Math.floor((VW - textWidth('TRANSCENDENCE', 3)) / 2), 34, th.hudFg, 3);
+    drawText(c, 'THE FINAL UPGRADE - BEYOND 2010 ITSELF',
+      Math.floor((VW - textWidth('THE FINAL UPGRADE - BEYOND 2010 ITSELF')) / 2), 64, th.hudAccent);
     drawText(c, 'KERNAGH REMAINS IN THE OLD SIGNAL',
-      Math.floor((CANVAS_W - textWidth('KERNAGH REMAINS IN THE OLD SIGNAL')) / 2), 78, th.hudFg);
+      Math.floor((VW - textWidth('KERNAGH REMAINS IN THE OLD SIGNAL')) / 2), 78, th.hudFg);
   } else {
     c.fillStyle = '#000000';
-    c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    c.fillRect(0, 0, VW, CANVAS_H);
     // chunky mono blocks: you are stuck in 1979
     for (let i = 0; i < 20; i++) {
       c.fillStyle = '#ffffff';
@@ -1061,25 +1108,76 @@ function renderEnd(c: CanvasRenderingContext2D, g: Game, win: boolean, time: num
     const sub = g.loseWhy === 'derez'
       ? 'DEREZZED AT THE FLOOR OF HISTORY'
       : `YOU ARE LEFT AT T${g.winTier} ${TIERS[g.winTier].name}`;
-    drawText(c, big, Math.floor((CANVAS_W - textWidth(big, 2)) / 2), 40, '#ffffff', 2);
-    drawText(c, sub, Math.floor((CANVAS_W - textWidth(sub)) / 2), 70, '#ffffff');
+    drawText(c, big, Math.floor((VW - textWidth(big, 2)) / 2), 40, '#ffffff', 2);
+    drawText(c, sub, Math.floor((VW - textWidth(sub)) / 2), 70, '#ffffff');
   }
+  const hiWin = win && g.winWhy !== 'circle';
   const mins = Math.floor(g.endTime / 60), secs = Math.floor(g.endTime % 60);
   const t = `TIME ${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  drawText(c, t, Math.floor((CANVAS_W - textWidth(t)) / 2), 100, win ? THEME[5].hudFg : '#ffffff');
-  drawEndOptions(c, g, time, win ? THEME[5].hudAccent : '#ffffff', win ? THEME[5].hudFg : '#ffffff', 122);
+  drawText(c, t, Math.floor((VW - textWidth(t)) / 2), 100, hiWin ? THEME[WIN_TIER].hudFg : '#ffffff');
+  drawEndOptions(c, g, time, hiWin ? THEME[WIN_TIER].hudAccent : '#ffffff', hiWin ? THEME[WIN_TIER].hudFg : '#ffffff', 122);
 }
 
 // ---------- main entry ----------
 
+// Legacy contract, used by the editor and the asset sheet as well as the game:
+// draw the play area at 256x176 through the current transform. The PC tiers
+// render at their native size and are squeezed down to fit.
+let hiPrev: [HTMLCanvasElement, CanvasRenderingContext2D] | null = null;
+
 export function renderPlay(c: CanvasRenderingContext2D, g: Game, envTier: number): void {
   if (envTier <= 2) attrRender(c, g, envTier);
-  else directRender(c, g, envTier);
+  else if (envTier < HI_TIER) directRender(c, g, envTier);
+  else {
+    const S = tierScale(envTier);
+    if (!hiPrev) { const cv = document.createElement('canvas'); hiPrev = [cv, cv.getContext('2d')!]; }
+    const [cv, k] = hiPrev;
+    sizeTo(cv, SCR_W * S, SCR_H * S);
+    k.setTransform(S, 0, 0, S, 0, 0);
+    hiresRender(k, g, envTier, SCR_W);
+    c.drawImage(cv, 0, 0, SCR_W, SCR_H);
+  }
+}
+
+function sizeTo(cv: HTMLCanvasElement, w: number, h: number): void {
+  w = Math.round(w); h = Math.round(h);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+}
+
+// Size the visible canvas for the tier whose screen is being shown, and set
+// the transform so everything downstream draws in logical units.
+function fit(c: CanvasRenderingContext2D, tier: number): void {
+  const S = tierScale(tier), vw = tierViewW(tier), cv = c.canvas;
+  const w = Math.round(vw * S), h = Math.round(CANVAS_H * S);
+  if (cv.width !== w || cv.height !== h) {
+    cv.width = w; cv.height = h;
+    cv.style.imageRendering = tier >= 7 ? 'auto' : 'pixelated';
+    cv.parentElement?.style.setProperty('--ar', String(vw / CANVAS_H));
+  }
+  c.setTransform(S, 0, 0, S, 0, 0);
+  c.imageSmoothingEnabled = false;
+  c.globalAlpha = 1;
+  VW = vw;
+  setFontMode(tier >= 7 ? 2 : tier >= HI_TIER ? 1 : 0);
+}
+
+// The play area at a tier's native size, into an offscreen buffer.
+function playInto(cv: HTMLCanvasElement, k: CanvasRenderingContext2D, g: Game, tier: number): void {
+  const S = tierScale(tier), vw = tierViewW(tier);
+  sizeTo(cv, vw * S, SCR_H * S);
+  k.setTransform(S, 0, 0, S, 0, 0);
+  if (tier >= HI_TIER) hiresRender(k, g, tier, vw);
+  else renderPlay(k, g, tier);
 }
 
 export function render(c: CanvasRenderingContext2D, g: Game, time: number): void {
+  if (g.mode !== 'play') {
+    const win = g.mode === 'win';
+    fit(c, !win || g.winWhy === 'circle' ? 0 : g.winWhy === 'elimination' ? (g.winTier >= HI_TIER ? g.winTier : 0) : WIN_TIER);
+  }
   if (g.mode === 'loading') { renderLoading(c, g, time); return; }
   if (g.mode === 'title') {
+    if (sxTitleScreen(c, time)) return;
     const phase = Math.floor(time / 6) % 3;
     if (phase === 1) renderGuide(c, time);
     else if (phase === 2) renderScoresScreen(c, time);
@@ -1090,30 +1188,35 @@ export function render(c: CanvasRenderingContext2D, g: Game, time: number): void
   if (g.mode === 'lose') { renderEnd(c, g, false, time); return; }
   if (g.mode === 'void') { renderVoid(c, time); return; }
 
+  const tier = g.player.tier;
+  fit(c, tier);
   const rippleT = g.ripple >= 0 ? g.time - g.ripple : 99;
   if (rippleT < 1) {
     // The old-tier scene hides behind a shrinking sliver and the world
     // barely moves in one second: capture it once at ripple start, and
-    // re-render only the new tier each frame.
+    // re-render only the new tier each frame. Either buffer may be a
+    // different size from the canvas; the composite stretches them to fit.
     if (rippleSnapAt !== g.ripple) {
       rippleSnapAt = g.ripple;
-      renderPlay(offACtx, g, g.rippleFrom);
+      playInto(offA, offACtx, g, g.rippleFrom);
     }
-    renderPlay(offBCtx, g, g.player.tier);
-    c.drawImage(offA, 0, 0);
-    const sweep = clamp(rippleT * 1.15, 0, 1) * SCR_W;
+    playInto(offB, offBCtx, g, tier);
+    c.drawImage(offA, 0, 0, VW, SCR_H);
+    const sweep = clamp(rippleT * 1.15, 0, 1) * VW;
     c.save();
     c.beginPath();
     c.rect(0, 0, sweep, SCR_H);
     c.clip();
-    c.drawImage(offB, 0, 0);
+    c.drawImage(offB, 0, 0, VW, SCR_H);
     c.restore();
     c.fillStyle = '#ffffff';
     c.globalAlpha = 0.8;
     c.fillRect(sweep - 1, 0, 3, SCR_H);
     c.globalAlpha = 1;
+  } else if (tier >= HI_TIER) {
+    hiresRender(c, g, tier, VW);
   } else {
-    renderPlay(c, g, g.player.tier);
+    renderPlay(c, g, tier);
   }
   // Pushstone progress: same idiom as the channel bar, drawn over either
   // pipeline above the player's head.
@@ -1125,5 +1228,7 @@ export function render(c: CanvasRenderingContext2D, g: Game, time: number): void
     c.fillStyle = g.player.tier <= 2 ? SPECTRUM[11] : '#8fe0d8';
     c.fillRect(sx + 1, sy - 4, Math.max(1, fill - 2), 1);
   }
-  drawHUD(c, g);
+  if (tier >= HI_TIER) drawHudHi(c, g, tier, VW);
+  else drawHUD(c, g);
+  sxOverlay(c, g, time, VW);
 }

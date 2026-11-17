@@ -4,6 +4,7 @@ import {
   Game, Vec, TILE, WORLD_TW, WORLD_TH, SHARDS_PER_UPGRADE, WIN_TIER, inSafe,
   SOLID_LUT, DX4, DY4,
 } from './defs';
+import { sxSight } from './secrets';
 import { solidTile, moveEnt, blocksBolt } from './map';
 
 const N = WORLD_TW * WORLD_TH;
@@ -219,7 +220,7 @@ export function updateRival(g: Game, dt: number, fire: (dx: number, dy: number) 
     ai.interceptT = 0;
     // Imperfect knowledge: he perceives shards within a walking range (shorter
     // when degraded); beyond that he patrols the shrines he knows.
-    const sight = g.difficulty === 'easy' ? 18 : 32;
+    const sight = (g.difficulty === 'easy' ? 18 : 32) + sxSight(g);
     const found = nearestPointByPath(g, Math.floor(r.x / TILE), Math.floor(r.y / TILE), sight, g.shards);
     if (found) {
       target = { x: found.x, y: found.y };

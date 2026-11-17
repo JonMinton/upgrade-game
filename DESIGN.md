@@ -2,7 +2,8 @@
 
 A retro flick-screen exploration game where upgrades don't improve *you* — they improve
 *the game itself*. You and an AI rival race up the ladder of audiovisual history, from
-late-1970s monochrome blocks to mid-1990s Amiga splendour.
+late-1970s monochrome blocks, through mid-1990s Amiga splendour, to the shader-lit PC of
+the late 2000s.
 
 Primary inspirations: **Feud** (Bulldog/Mastertronic, 1987) for the flick-screen overhead
 world, the single AI rival, and scavenging-driven rivalry; **Robin of the Wood**
@@ -33,7 +34,9 @@ rival is ahead.
 | **T2** | Spectrum 128 / Amstrad-ish (1985–86) | Still attribute-based but clash minimised by smarter cell alignment; 2-frame → 4-frame walk cycles | AY-3-8912: 3 channels, music and SFX coexist | |
 | **T3** | C64-style 8-bit with hardware sprites (1987) | 16-colour fixed palette, sprites free of the attribute grid (no clash), smooth sub-cell movement, simple scroll instead of screen-flick | SID-style: 3 channels with filter sweeps, bass | Screen-flick becomes a fast push-scroll |
 | **T4** | Atari ST / EGA (1989–91) | 16 colours from a 512-colour palette, 8-frame animation, tile detail doubles | 4-channel sampled drums + FM-ish melody | |
-| **T5** | Commodore Amiga (1992–95) | 32+ colours, parallax layers, anti-aliased sprites, ambient animation (swaying trees, rippling water) | 4-channel MOD music, stereo, sampled SFX | **Win tier** — reach it and hold it for 10 s to win |
+| **T5** | Commodore Amiga (1992–95) | 32+ colours, parallax layers, anti-aliased sprites, ambient animation (swaying trees, rippling water) | 4-channel MOD music, stereo, sampled SFX | The original summit |
+| **T6** | Pentium PC, SVGA (c. 1997) | 640×480, 256 colours: pre-rendered-style sprites crushed to a colour cube with ordered dither and 1-bit alpha, palette-cycling water, 8-frame walks, bitmap GUI text, a Win95 taskbar for a HUD | Wavetable-card General MIDI: bell lead, pad chords, fuller kit, a touch of room | |
+| **T7** | Shader-era PC (c. 2007) | 1280×768 **widescreen**, truecolour, feathered terrain blending, soft shadows, additive lighting, bloom, drifting motes, smooth text, glass HUD; the camera follows instead of flicking | String section, sub bass, convolution reverb | **Win tier** — one final, longer ritual here is transcendence |
 
 The tier transition itself is a celebrated moment: a one-second "re-render" ripple sweeps
 across the screen redrawing every cell in the new fidelity, with the soundtrack
@@ -382,6 +385,47 @@ increasingly rich stereo samples as he pulls ahead.
   drops from ~35% to ~12%, longest non-ritual stand from ~16 s to the
   boredom cap; time within 200 px of the player roughly triples
   (4% → 12% easy, 6.5% → 16% hard).
+
+### The PC years: T6 and T7 (2026-11-17)
+
+- **Two more rungs.** The ladder now runs T0–T7; `WIN_TIER` is 7 and the
+  final ritual happens there ("beyond 2010 itself"). Both new tiers are PC
+  eras and both break the 256×192 grid, which nothing before them did.
+- **One art set, two machines** (`src/hires.ts`). The PC tiers share a set of
+  procedural sprites painted with canvas vector ops at native resolution.
+  T6 pushes them through 1997 hardware: every sprite is quantised to a 6×6×6
+  colour cube with a 4×4 Bayer dither and thresholded alpha, water
+  palette-cycles, and text is a system face with its anti-aliasing cut off.
+  T7 leaves the same art smooth and adds what a 2007 GPU would: terrain
+  classes blended by feathered alpha, a multiply vignette and cloud shade,
+  additive glows on everything magical, a downsample-square-add bloom, and
+  pollen motes. Ground textures sample a noise that tiles every four tiles,
+  so there are no seams however the sprites overlap.
+- **The canvas resizes with the tier.** `render()` owns the canvas: 256×192
+  up to T5, 640×480 at T6, 1280×768 at T7 (the frame's aspect ratio follows
+  via a CSS variable, so reaching T7 visibly widens the screen). Everything
+  draws in logical units through a scale transform; `font.ts` has three modes
+  (3×5 bitmap / crisp / smooth) that all fit the same text box, so HUD and
+  end-screen layout code is shared. The upgrade ripple composites two
+  buffers of different sizes. `renderPlay()` keeps its 256×176 contract for
+  the editor and the asset sheet by squeezing the PC tiers down.
+- **Camera.** T6 keeps the push-scroll. T7 abandons the screen grid for a
+  follow camera over a 320-wide view. Rules are untouched — safe screens,
+  the minimap and sound bleed still think in screens.
+- **Avatars keep their own tier, in both directions.** A PC-tier wizard in a
+  Spectrum world is the hi-res sprite squeezed onto the coarse grid with
+  smoothing on; a Spectrum wizard in the T7 valley is still two inks of
+  chunky pixels, now standing in bloom.
+- **Storage media continue:** CD-ROM at T6, USB stick at T7.
+- **Pacing.** Seven rituals instead of five. Shard respawn 19 s → 13 s and the
+  win time bonus base 600 → 780. Idle-player sim (10 games, headless): loss
+  at ~9.6 min easy / ~8.2 min hard. Kernagh is travel-bound rather than
+  supply-bound, so faster respawn mostly helps the chasing player.
+- **Also fixed:** the channel bar overflowed its frame during the 5 s final
+  ritual (it was always scaled to the 3 s one).
+- **Not written down here, on purpose:** some things were added that are
+  meant to be found by playing. They all live in `src/secrets.ts`, behind a
+  spoiler banner; the rest of the code only calls its `sx*` hooks.
 
 ## Future work
 

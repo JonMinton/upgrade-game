@@ -4,7 +4,7 @@
 
 import {
   Game, World, Tl, TILE, SCR_TW, SCR_TH, SCR_W, SCR_H, WORLD_TW, WORLD_TH,
-  WORLD_SW, WORLD_SH, START_TIER,
+  WORLD_SW, WORLD_SH, START_TIER, TIERS,
 } from './defs';
 import { genWorld, worldFromTiles, poisReachable } from './map';
 import { ruleGenTiles } from './rulegen';
@@ -120,7 +120,7 @@ const spacer = document.createElement('span');
 spacer.className = 'lbl';
 spacer.textContent = 'tier:';
 bar.appendChild(spacer);
-for (let t = 0; t <= 5; t++) {
+for (let t = 0; t < TIERS.length; t++) {
   const b = button(`T${t}`, () => { selTier = t; fake.player.tier = t; markSel('tier', b); }, 'tier');
   if (t === selTier) b.classList.add('sel');
 }

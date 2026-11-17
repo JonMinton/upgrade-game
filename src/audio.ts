@@ -1,10 +1,13 @@
 // WebAudio chip-synth. One tune, arranged per tier:
 // T0/T1 in-game: SFX only (beeper). T2: AY-style 3ch square. T3: smoother voices.
 // T4: + drums. T5: stereo, detune, harmony — "MOD" richness.
+// T6: wavetable-card General MIDI — bell lead, pad chords, a fuller kit and a
+// touch of room. T7: streamed-audio era — string section, sub bass, real reverb.
 
 let ac: AudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
+let revSend: GainNode | null = null;
 let musicTier = 1;
 let titleMode = true;
 
@@ -42,12 +45,32 @@ export function initAudio(): void {
   noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  // Room: a synthetic impulse (decaying stereo noise) behind a send that only
+  // opens at the PC tiers.
+  const ir = ac.createBuffer(2, Math.floor(ac.sampleRate * 2.4), ac.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const r = ir.getChannelData(ch);
+    for (let i = 0; i < r.length; i++) r[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / r.length, 2.6);
+  }
+  const conv = ac.createConvolver();
+  conv.buffer = ir;
+  revSend = ac.createGain();
+  revSend.gain.value = 0;
+  master.connect(revSend).connect(conv).connect(ac.destination);
+  setMusicTier(musicTier);
   nextNote = ac.currentTime + 0.1;
   setInterval(schedule, 60);
 }
 
-export function setMusicTier(t: number): void { musicTier = t; }
-export function setTitleMode(b: boolean): void { titleMode = b; }
+export function setMusicTier(t: number): void {
+  musicTier = t;
+  if (ac && revSend) revSend.gain.setTargetAtTime(titleMode ? 0 : t >= 7 ? 0.3 : t >= 6 ? 0.1 : 0, ac.currentTime, 0.2);
+}
+export function setTitleMode(b: boolean): void {
+  if (b === titleMode) return;
+  titleMode = b;
+  setMusicTier(musicTier);
+}
 
 function out(pan: number): AudioNode {
   if (!ac || !master) throw new Error('no audio');
@@ -105,6 +128,29 @@ function noteAt(t: number, f: number, dur: number, type: OscillatorType, vol: nu
   o.stop(t + dur + 0.02);
 }
 
+// Slow-attack sustained voice: pad chords and (through a lowpass) strings.
+function padAt(t: number, f: number, dur: number, type: OscillatorType, vol: number, pan = 0, cutoff = 0): void {
+  if (!ac) return;
+  const o = ac.createOscillator();
+  o.type = type;
+  o.frequency.value = f;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + dur * 0.3);
+  g.gain.setValueAtTime(vol, t + dur * 0.7);
+  g.gain.linearRampToValueAtTime(0, t + dur);
+  if (cutoff) {
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = cutoff;
+    o.connect(lp).connect(g).connect(out(pan));
+  } else {
+    o.connect(g).connect(out(pan));
+  }
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+
 function drumAt(t: number, kind: 'kick' | 'snare' | 'hat'): void {
   if (!ac || !noiseBuf) return;
   if (kind === 'kick') {
@@ -156,6 +202,7 @@ function stepAt(absStep: number, t: number): void {
   if (tier < 2) return;
   const m = mel[s];
   const b = bass[s];
+  if (tier >= 6) { pcStep(tier, s, t, m, b, bass, bridge); return; }
   const melType: OscillatorType = tier >= 4 ? 'sawtooth' : 'square';
   const melVol = tier >= 4 ? 0.055 : 0.07;
   if (m) {
@@ -172,6 +219,39 @@ function stepAt(absStep: number, t: number): void {
     if (s % 8 === 4) drumAt(t, 'snare');
     if (s % 2 === 1) drumAt(t, 'hat');
   }
+}
+
+// The PC arrangement of the same tune.
+function pcStep(tier: number, s: number, t: number, m: number, b: number, bass: number[], bridge: boolean): void {
+  const hd = tier >= 7;
+  if (m) {
+    // bell: a sine with a fast-dying octave-and-fifth partial
+    noteAt(t, freq(m), 0.32, 'sine', 0.085, 0.2);
+    noteAt(t, freq(m + 19), 0.07, 'sine', 0.035, 0.2);
+    if (hd) noteAt(t + STEP * 1.5, freq(m), 0.2, 'sine', 0.022, -0.5);   // echo
+    if (hd && bridge) noteAt(t, freq(m + 3), 0.28, 'triangle', 0.03, -0.25);
+  }
+  if (b) {
+    noteAt(t, freq(b), 0.34, 'triangle', 0.15);
+    if (hd) noteAt(t, freq(b - 12), 0.4, 'sine', 0.12);
+  }
+  if (s % 4 === 2) noteAt(t, freq(bass[Math.floor(s / 4) * 4] + 12), 0.09, 'triangle', 0.04, 0.15);
+  // one chord per half-bar, voiced off the bass root (minor pentatonic colour)
+  if (s % 16 === 0) {
+    const root = bass[s] + 12, dur = STEP * 16;
+    for (const [iv, pan] of [[0, -0.4], [7, 0.4], [15, 0], [22, 0.25]] as const) {
+      if (hd) {
+        padAt(t, freq(root + iv) * 0.997, dur, 'sawtooth', 0.016, pan, 1400);
+        padAt(t, freq(root + iv) * 1.003, dur, 'sawtooth', 0.016, -pan, 1400);
+      } else {
+        padAt(t, freq(root + iv), dur, 'triangle', 0.028, pan);
+      }
+    }
+  }
+  if (s % 8 === 0 || (hd && s % 16 === 10)) drumAt(t, 'kick');
+  if (s % 8 === 4) drumAt(t, 'snare');
+  drumAt(t, 'hat');
+  if (s >= 28) noteAt(t, freq(52 - (s - 28) * 3), 0.12, 'sine', 0.1, (s - 29.5) * 0.3);   // tom fill
 }
 
 export type SfxName =
@@ -191,6 +271,7 @@ export function sfx(name: SfxName, tier: number, vol = 1, pan = 0): void {
       else if (tier <= 2) { tone(1300, 160, 0.16, 'square', 0.16 * vol, pan); tone(1320, 170, 0.16, 'square', 0.1 * vol, pan); }
       else if (tier <= 3) { tone(1100, 120, 0.18, 'sawtooth', 0.16 * vol, pan); noise(0.06, 2500, 'highpass', 0.05 * vol, pan); }
       else { tone(1000, 90, 0.22, 'sawtooth', 0.16 * vol, pan); noise(0.12, 1800, 'bandpass', 0.1 * vol, pan); }
+      if (tier >= 6) tone(190, 55, 0.2, 'sine', 0.16 * vol, pan);
       break;
     case 'hit':
       tone(300, 80, 0.12, 'square', 0.18 * vol, pan);
@@ -211,6 +292,7 @@ export function sfx(name: SfxName, tier: number, vol = 1, pan = 0): void {
       tone(220, 1760, 0.7, tier >= 4 ? 'sawtooth' : 'square', 0.14 * vol, pan);
       tone(330, 2640, 0.7, 'square', 0.08 * vol, pan, 0.05);
       if (tier >= 3) noise(0.6, 4000, 'highpass', 0.05 * vol, pan, 0.2);
+      if (tier >= 6) for (const [i, n] of [64, 71, 76, 83].entries()) tone(freq(n), freq(n), 0.9, 'sine', 0.06 * vol, pan, 0.25 + i * 0.09);
       break;
     case 'ritual':
       tone(500 + tier * 60, 700 + tier * 60, 0.08, 'square', 0.09 * vol, pan);

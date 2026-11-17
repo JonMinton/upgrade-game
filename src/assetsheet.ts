@@ -335,6 +335,8 @@ const PALETTE_NOTE = [
   '16 fixed (VIC-II)',
   '16 of 512',
   '32+, parallax',
+  '256 of 16M, dithered',
+  'truecolour + post',
 ];
 
 const SCENE_H = SCENE_CROP * SCALE + 22;

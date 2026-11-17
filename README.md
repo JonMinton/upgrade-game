@@ -5,8 +5,9 @@
 
 A retro flick-screen exploration game where the upgrades you find don't improve your
 character — they improve **the game itself**. Race an AI rival from ZX Spectrum
-attribute-clash monochrome-adjacent 1982 up to 32-colour Amiga 1995. Get derezzed and
-you fall back toward 1979.
+attribute-clash monochrome-adjacent 1982, past the 32-colour Amiga of 1995, through a
+256-colour SVGA Pentium, to a widescreen, bloom-lit PC of the late 2000s. Get derezzed
+and you fall back toward 1979.
 
 Inspired by *Feud* (1987) and *Robin of the Wood* (1985).
 
@@ -54,11 +55,11 @@ npm install && npm run dev   # then open the printed localhost URL
 
 Arrows/WASD move, Space (or X) fires, Enter starts. Gather 3 shards, channel for
 3 seconds at the Standing Stones (north of centre) to upgrade a tier. Win by
-**transcendence** — at T5, complete one final, longer ritual before Kernagh does —
+**transcendence** — at T7, complete one final, longer ritual before Kernagh does —
 or by **elimination** — derez Kernagh while he's already at rock-bottom T0. Get
 derezzed (3 hits) and you drop a tier, lose your shards, and respawn at the
 village; get derezzed at T0 and it's game over. Home screens (your village,
-Kernagh's keep) are combat-free. Shards regrow at shrines every ~22 s. Berries
+Kernagh's keep) are combat-free. Shards regrow at shrines every ~13 s. Berries
 heal; the pedestal in your village swaps between firewand (harms) and icewand
 (freezes). The default map ("GLEN") is fixed across all games — learn it. Press
 C on the title screen for **Chaos Mode**: a freshly generated valley every time
@@ -76,7 +77,8 @@ the minimap (bottom right): green is home, cyan is the Standing Stones.
 
 ## Status
 
-Playable prototype: full tier ladder T0-T5 (attribute-clash Spectrum renderer,
-C64/ST/Amiga direct renderers), chip-synth audio arranged per tier, rival AI,
+Playable prototype: full tier ladder T0-T7 (attribute-clash Spectrum renderer,
+C64/ST/Amiga direct renderers, hi-res SVGA and shader-era PC renderers), synth audio
+arranged per tier, rival AI,
 combat, ritual upgrades, win/lose flow. Balance tuning constants live at the top
 of `src/game.ts`.

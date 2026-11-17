@@ -25,6 +25,7 @@ export const Tl = {
   CRACK: 19,  // cracked stone: a standing stone split by icewand frost (permanent)
   BURN: 20,   // tree on fire: transient, in-game only (never persisted as-is)
   CLEFT: 21,  // split boulder: an ordinary rock frost-split by icewand
+  ICE: 22,    // frozen water: transient, in-game only, walkable while it lasts
 } as const;
 
 export const SOLID = new Set<number>([
@@ -72,7 +73,7 @@ export const DMG_CFG = {
 };
 
 export const START_TIER = 1;
-export const WIN_TIER = 5;
+export const WIN_TIER = 7;
 export const TIERS = [
   { name: '1979 MONO', quant: 8 },
   { name: 'SPECTRUM 48K', quant: 4 },
@@ -80,7 +81,16 @@ export const TIERS = [
   { name: 'C64', quant: 1 },
   { name: '16-BIT ST', quant: 1 },
   { name: 'AMIGA', quant: 1 },
+  { name: 'PENTIUM SVGA', quant: 1 },
+  { name: 'SHADER GPU', quant: 1 },
 ];
+
+// Tiers 6+ render above the 256x192 logical grid: device pixels per logical
+// pixel, and the logical view width (T7 goes widescreen). Everything below
+// T6 is 1:1 at 256 wide.
+export const HI_TIER = 6;
+export function tierScale(t: number): number { return t >= 7 ? 4 : t >= 6 ? 2.5 : 1; }
+export function tierViewW(t: number): number { return t >= 7 ? 320 : 256; }
 
 export const SHARDS_PER_UPGRADE = 3;
 export const CHANNEL_TIME = 3;
@@ -117,6 +127,7 @@ TILE_ATTR[Tl.STUMP] = [7, 0];   // charcoal-grey remains of a burnt tree
 TILE_ATTR[Tl.CRACK] = [7, 0];   // a split menhir loses its BRIGHT
 TILE_ATTR[Tl.BURN] = [10, 0];   // bright red base; render flickers it yellow
 TILE_ATTR[Tl.CLEFT] = [7, 0];   // a split boulder: rock-grey, like its whole kin
+TILE_ATTR[Tl.ICE] = [1, 15];    // blue cracks on bright white
 
 // C64 palette (Pepto's measured VIC-II values). The VIC-II fixed the chroma
 // amplitude in hardware, so nothing on a C64 was ever fully saturated —
@@ -169,6 +180,26 @@ export const THEME: Record<number, Theme> = {
     rock: '#84889a', rockHi: '#b4b8ca', stone: '#c2c4d2', stoneHi: '#f0f2fc',
     altarPad: '#1c2030', altarGlow: '#54e8f8', shrineGlow: '#ffe060',
     hudBg: '#181828', hudFg: '#f6f6fa', hudAccent: '#ffe060',
+  },
+  // T6/T7 world art lives in hires.ts; these entries colour the shared
+  // paths (FX, end screens, legacy fallbacks). T6 wears the Win95 desktop.
+  6: {
+    grass: '#3c8c3c', grass2: '#2f7a33', path: '#c8a860', path2: '#a88c4c',
+    trunk: '#7a5230', tree1: '#1c4c1c', tree2: '#2c6c24', tree3: '#48903c',
+    water: '#2048a8', water2: '#4878d8', water3: '#90b8f0', reed: '#88c058',
+    wall: '#a0a0a8', wallDark: '#686870', hut: '#a86038', hutDark: '#784424',
+    rock: '#808088', rockHi: '#b0b0b8', stone: '#b8b8c0', stoneHi: '#e8e8f0',
+    altarPad: '#202030', altarGlow: '#50e0f0', shrineGlow: '#ffd850',
+    hudBg: '#008080', hudFg: '#ffffff', hudAccent: '#ffff60',
+  },
+  7: {
+    grass: '#4a9a48', grass2: '#3c8840', path: '#d4b474', path2: '#b89858',
+    trunk: '#805a34', tree1: '#1a4a20', tree2: '#2a7030', tree3: '#58a848',
+    water: '#1c4cb0', water2: '#5890e8', water3: '#b0d4ff', reed: '#98d068',
+    wall: '#a8acb8', wallDark: '#6c7080', hut: '#b87044', hutDark: '#80482c',
+    rock: '#868c9c', rockHi: '#bcc2d2', stone: '#c4c8d6', stoneHi: '#f4f6ff',
+    altarPad: '#181c2c', altarGlow: '#60f0ff', shrineGlow: '#ffe470',
+    hudBg: '#0c1220', hudFg: '#f4f8ff', hudAccent: '#ffe470',
   },
 };
 
@@ -233,6 +264,10 @@ export type Difficulty = 'easy' | 'hard';
 
 export interface Game {
   mode: 'loading' | 'title' | 'play' | 'win' | 'lose' | 'void';
+  // Bookkeeping owned by src/secrets.ts (optional: tools build bare Games).
+  sx?: Record<string, number>;
+  ice?: { i: number; until: number }[];
+  crash?: { tier: number; at: number };
   difficulty: Difficulty;
   loadT: number;
   time: number; world: World;
@@ -247,7 +282,7 @@ export interface Game {
   hinted3: boolean;
   endTime: number;
   loseWhy: 'race' | 'derez';
-  winWhy: 'transcend' | 'elimination';
+  winWhy: 'transcend' | 'elimination' | 'circle';
   winTier: number;   // player tier at the moment of victory (styles the partial screen)
   maxTier: number;   // highest tier the player reached this game
   kills: number;     // times Kernagh was derezzed
