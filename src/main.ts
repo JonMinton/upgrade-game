@@ -2,7 +2,8 @@
 
 import { Game, Input, CANVAS_W, CANVAS_H, PUSH_CFG, DMG_CFG } from './defs';
 import { newGame, update, msg, finalScore } from './game';
-import { render } from './render';
+import { render, titlePhase } from './render';
+import { initTouch, syncTouch } from './touch';
 import { initAudio, setTitleMode, setMusicTier } from './audio';
 import { qualifies, addScore, cycleMapFilter } from './hiscores';
 import { sxEnd, sxKey, sxOpening } from './secrets';
@@ -52,17 +53,21 @@ const KEYMAP: Record<string, keyof Input> = {
   ' ': 'fire', x: 'fire', X: 'fire',
 };
 
-window.addEventListener('keydown', e => {
-  sxKey(g, e.key);
+// Every key press goes through here — from the real keyboard, or from the
+// on-screen touch controls, which press keys by name exactly as a keyboard
+// would. Returns true when the key was the game's, so the browser default
+// (scrolling on arrows/space, say) should be suppressed.
+function keyDown(key: string): boolean {
+  sxKey(g, key);
   // Hi-score initials entry captures the keyboard entirely.
   if (g.entryActive) {
-    if (/^[a-zA-Z0-9]$/.test(e.key) && g.entryName.length < 3) {
-      g.entryName += e.key.toUpperCase();
-    } else if (e.key === 'Backspace') {
+    if (/^[a-zA-Z0-9]$/.test(key) && g.entryName.length < 3) {
+      g.entryName += key.toUpperCase();
+    } else if (key === 'Backspace') {
       g.entryName = g.entryName.slice(0, -1);
-    } else if (e.key === 'Escape') {
+    } else if (key === 'Escape') {
       g.entryActive = false;   // decline the hall
-    } else if (e.key === 'Enter' && g.entryName.length > 0) {
+    } else if (key === 'Enter' && g.entryName.length > 0) {
       addScore({
         name: g.entryName.padEnd(3, '.'),
         score: g.score,
@@ -71,59 +76,71 @@ window.addEventListener('keydown', e => {
       });
       g.entryActive = false;
     }
-    e.preventDefault();
-    return;
+    return true;
   }
   // Title-screen seed entry (seeded chaos) captures digits.
   if (g.mode === 'title' && g.seedEntry !== null) {
-    if (/^[0-9]$/.test(e.key) && g.seedEntry.length < 6) g.seedEntry += e.key;
-    else if (e.key === 'Backspace') g.seedEntry = g.seedEntry.slice(0, -1);
-    else if (e.key === 'Escape') g.seedEntry = null;
-    else if (e.key === 'Enter' && g.seedEntry.length > 0) {
+    if (/^[0-9]$/.test(key) && g.seedEntry.length < 6) g.seedEntry += key;
+    else if (key === 'Backspace') g.seedEntry = g.seedEntry.slice(0, -1);
+    else if (key === 'Escape') g.seedEntry = null;
+    else if (key === 'Enter' && g.seedEntry.length > 0) {
       seedStart = Math.max(1, parseInt(g.seedEntry, 10) || 1);
       g.seedEntry = null;
       initAudio();
     }
-    e.preventDefault();
-    return;
+    return true;
   }
   // Title-screen cheat: type FABLETON then Enter to unlock everything.
   // (No letter of it collides with the C/H/S/M/D hotkeys.)
   if (g.mode === 'title') {
-    if (/^[a-z]$/i.test(e.key)) cheatBuf = (cheatBuf + e.key.toLowerCase()).slice(-8);
-    if (e.key === 'Enter' && cheatBuf === 'fableton') {
+    if (/^[a-z]$/i.test(key)) cheatBuf = (cheatBuf + key.toLowerCase()).slice(-8);
+    if (key === 'Enter' && cheatBuf === 'fableton') {
       cheatBuf = '';
       try {
         localStorage.setItem('upgrade-hard-unlocked', '1');
         localStorage.setItem('upgrade-crt-unlocked', '1');
       } catch { /* private mode */ }
       g.cheatMsgUntil = performance.now() / 1000 + 4;
-      e.preventDefault();
-      return;
+      return true;
     }
   }
-  if (e.key === 'Enter') { enterPressed = true; initAudio(); e.preventDefault(); return; }
-  if (e.key === 'Escape') escPressed = true;
-  if (e.key === 'h' || e.key === 'H') hardPressed = true;
-  if (e.key === 'c' || e.key === 'C') chaosPressed = true;
-  if ((e.key === 's' || e.key === 'S') && g.mode === 'title') seedOpenPressed = true;
+  if (key === 'Enter') { enterPressed = true; initAudio(); return true; }
+  if (key === 'Escape') escPressed = true;
+  if (key === 'h' || key === 'H') hardPressed = true;
+  if (key === 'c' || key === 'C') chaosPressed = true;
+  if ((key === 's' || key === 'S') && g.mode === 'title') seedOpenPressed = true;
   // D toggles the CRT overlay — outside play only, where D is WASD-right.
-  if ((e.key === 'd' || e.key === 'D') && g.mode !== 'play' && crtUnlocked()) {
+  if ((key === 'd' || key === 'D') && g.mode !== 'play' && crtUnlocked()) {
     setCrt(!document.body.classList.contains('crt'));
   }
-  if (e.key === ' ') spacePressed = true;
-  if ((e.key === 'm' || e.key === 'M') && g.mode === 'title') cycleMapFilter();
-  const k = KEYMAP[e.key];
-  if (k) { input[k] = true; initAudio(); e.preventDefault(); }
-});
-window.addEventListener('keyup', e => {
-  const k = KEYMAP[e.key];
+  if (key === ' ') spacePressed = true;
+  if ((key === 'm' || key === 'M') && g.mode === 'title') cycleMapFilter();
+  const k = KEYMAP[key];
+  if (k) { input[k] = true; initAudio(); return true; }
+  return false;
+}
+
+function keyUp(key: string): void {
+  const k = KEYMAP[key];
   if (k) input[k] = false;
+}
+
+window.addEventListener('keydown', e => {
+  if (keyDown(e.key)) e.preventDefault();
 });
+window.addEventListener('keyup', e => keyUp(e.key));
 
 let g: Game = newGame();
 let last = performance.now();
 let lastFrameAt = performance.now();
+
+initTouch({
+  press: keyDown,
+  release: keyUp,
+  wake: initAudio,
+  unlocks: () => ({ hard: unlocked(), crt: crtUnlocked() }),
+  titlePhase,
+});
 
 // Debug/testing handles (harmless in production).
 (window as unknown as { __game: () => Game }).__game = () => g;
@@ -290,7 +307,10 @@ function tick(now: number, draw = true): void {
   if (g.mode === 'title') setTitleMode(true);
   if (g.mode === 'win') setMusicTier(g.winWhy === 'transcend' ? 7 : g.winTier);
   if (g.mode === 'lose' || g.mode === 'void') setMusicTier(0);   // the Void is silent
-  if (draw) render(ctx, g, now / 1000);
+  if (draw) {
+    render(ctx, g, now / 1000);
+    syncTouch(g, now / 1000);
+  }
 }
 
 let rafId = 0;

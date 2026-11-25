@@ -53,7 +53,11 @@ npm run build    # production build to dist/
 npm install && npm run dev   # then open the printed localhost URL
 ```
 
-Arrows/WASD move, Space (or X) fires, Enter starts. Gather 3 shards, channel for
+Arrows/WASD move, Space (or X) fires, Enter starts. On a phone or tablet, touch
+controls appear instead: a D-pad and FIRE button in play, and buttons named after
+the keys the screen asks for (ENTER, ESC, C, H...) everywhere else, plus an
+on-screen keyboard for hi-score initials and chaos seeds. Portrait puts the game
+on top with the controls beneath; landscape puts them either side. Gather 3 shards, channel for
 3 seconds at the Standing Stones (north of centre) to upgrade a tier. Win by
 **transcendence** — at T7, complete one final, longer ritual before Kernagh does —
 or by **elimination** — derez Kernagh while he's already at rock-bottom T0. Get

@@ -37,7 +37,13 @@ const BASS_B = [
 const freq = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
 
 export function initAudio(): void {
-  if (ac) return;
+  if (ac) {
+    // A context made outside a user gesture starts suspended (a touch press
+    // lands on pointerdown, which doesn't count), and iOS suspends it again
+    // ("interrupted") in the background: any later key or touch wakes it.
+    if (ac.state !== 'running' && ac.state !== 'closed') ac.resume().catch(() => { /* not allowed yet */ });
+    return;
+  }
   ac = new AudioContext();
   master = ac.createGain();
   master.gain.value = 0.5;

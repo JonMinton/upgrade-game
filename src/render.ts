@@ -22,6 +22,7 @@ import {
 } from './sprites';
 import { drawText, textWidth, setFontMode } from './font';
 import { filteredScores, activeMapFilter } from './hiscores';
+import { touchActive } from './touch';
 
 // Pulsing diamond burst for T0 shard signalling (16x16).
 const BURST = (() => {
@@ -920,7 +921,7 @@ function renderTitle(c: CanvasRenderingContext2D, g: Game, time: number): void {
   }
   drawText(c, 'UPGRADE', Math.floor((VW - textWidth('UPGRADE', 4)) / 2), 30, SPECTRUM[15], 4);
   const lines: [string, string][] = [
-    ['ARROWS MOVE - SPACE FIRE', SPECTRUM[15]],
+    [touchActive() ? 'D-PAD MOVE - BUTTON FIRE' : 'ARROWS MOVE - SPACE FIRE', SPECTRUM[15]],
     ['FIRST TO THE FINAL UPGRADE WINS', SPECTRUM[14]],
   ];
   lines.forEach(([s, colr], i) => {
@@ -1170,6 +1171,11 @@ function playInto(cv: HTMLCanvasElement, k: CanvasRenderingContext2D, g: Game, t
   else renderPlay(k, g, tier);
 }
 
+// Which title-screen page is up: 0 title, 1 how to play, 2 hall of signals.
+export function titlePhase(time: number): number {
+  return Math.floor(time / 6) % 3;
+}
+
 export function render(c: CanvasRenderingContext2D, g: Game, time: number): void {
   if (g.mode !== 'play') {
     const win = g.mode === 'win';
@@ -1178,7 +1184,7 @@ export function render(c: CanvasRenderingContext2D, g: Game, time: number): void
   if (g.mode === 'loading') { renderLoading(c, g, time); return; }
   if (g.mode === 'title') {
     if (sxTitleScreen(c, time)) return;
-    const phase = Math.floor(time / 6) % 3;
+    const phase = titlePhase(time);
     if (phase === 1) renderGuide(c, time);
     else if (phase === 2) renderScoresScreen(c, time);
     else renderTitle(c, g, time);
