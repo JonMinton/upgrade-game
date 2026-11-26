@@ -13,7 +13,7 @@
 // The layout (portrait: game on top, controls below; landscape: controls in
 // the side gutters) lives in index.html's stylesheet.
 
-import type { Game } from './defs';
+import { inSafe, type Game } from './defs';
 
 export interface TouchHooks {
   press(key: string): void;
@@ -274,7 +274,13 @@ export function syncTouch(g: Game, time: number): void {
     }
   }
 
-  if (view === 'pad') fireBtn.dataset.wand = g.player.wand;
+  if (view === 'pad') {
+    fireBtn.dataset.wand = g.player.wand;
+    // A shot on a home screen is refused with only a sound, and phones are
+    // often muted, so dim FIRE there. It stays live: FIRE plus a direction
+    // still hauls stones in a safe room.
+    fireBtn.classList.toggle('safe', inSafe(g.world, g.player.x, g.player.y));
+  }
 
   if (view === 'alpha' || view === 'digits') {
     const val = view === 'alpha' ? g.entryName : g.seedEntry ?? '';
