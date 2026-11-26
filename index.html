@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>UPGRADE</title>
     <style>
       html,
@@ -17,6 +17,8 @@
         position: relative;
         /* --ar is set by the renderer: 4:3 until T7 goes widescreen. */
         width: min(100vw, calc(100vh * var(--ar, 1.3333)));
+        /* Mobile browsers' toolbars eat into 100vh; dvh is what's visible. */
+        width: min(100vw, calc(100dvh * var(--ar, 1.3333)));
         aspect-ratio: var(--ar, 1.3333);
       }
       canvas {
@@ -48,6 +50,272 @@
           radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.35) 100%),
           linear-gradient(rgba(0, 0, 0, 0.25) 0 50%, transparent 50% 100%);
         background-size: 100% 100%, 100% calc(100% / 192);
+      }
+
+      /* ---------- touch controls (src/touch.ts) ----------
+         Shown on phones/tablets (body.touch). Portrait: the game sits at the
+         top and the controls in the space below. Landscape: the game stays
+         centred and the controls take the side gutters, translucent where a
+         narrow gutter makes them overlap it. */
+      #touch {
+        display: none;
+      }
+      body.touch,
+      body.touch * {
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body.touch {
+        overscroll-behavior: none;
+      }
+      @media (orientation: portrait) {
+        body.touch {
+          place-items: start center;
+        }
+      }
+      body.touch #touch {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        pointer-events: none;
+        color: #fff;
+        font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+        --edge: 14px;
+        --sl: env(safe-area-inset-left, 0px);
+        --sr: env(safe-area-inset-right, 0px);
+        --st: env(safe-area-inset-top, 0px);
+        --sb: env(safe-area-inset-bottom, 0px);
+        --dpad: clamp(116px, 34vmin, 176px);
+        --fire: clamp(72px, 22vmin, 108px);
+        --kh: 52px;
+      }
+      #touch .dpad,
+      #touch .fire,
+      #touch .strip,
+      #touch .board {
+        display: none;
+        position: absolute;
+        pointer-events: auto;
+      }
+      #touch[data-view='pad'] .dpad,
+      #touch[data-view='pad'] .fire,
+      #touch[data-view='pad'] .strip,
+      #touch[data-view='menu'] .strip,
+      #touch[data-view='alpha'] .board,
+      #touch[data-view='digits'] .board {
+        display: block;
+      }
+      #touch[data-view='pad'] .strip,
+      #touch[data-view='menu'] .strip {
+        display: flex;
+      }
+      #touch[data-view='alpha'] .digits,
+      #touch[data-view='digits'] .alpha {
+        display: none;
+      }
+
+      /* D-pad: a cross on a dish. The whole dish is live; arms just show. */
+      #touch .dpad {
+        left: calc(var(--edge) + var(--sl));
+        bottom: calc(var(--edge) + var(--sb));
+        width: var(--dpad);
+        height: var(--dpad);
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.07);
+        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.16);
+      }
+      #touch .arm,
+      #touch .hub {
+        position: absolute;
+        width: 32%;
+        height: 32%;
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.17);
+      }
+      #touch .hub {
+        left: 34%;
+        top: 34%;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.09);
+      }
+      #touch .arm.up { left: 34%; top: 4%; }
+      #touch .arm.down { left: 34%; bottom: 4%; }
+      #touch .arm.left { top: 34%; left: 4%; }
+      #touch .arm.right { top: 34%; right: 4%; }
+      #touch .arm::after {
+        content: '';
+        position: absolute;
+        inset: 28%;
+        background: rgba(255, 255, 255, 0.75);
+        clip-path: polygon(50% 12%, 92% 82%, 8% 82%);
+      }
+      #touch .arm.down::after { transform: rotate(180deg); }
+      #touch .arm.left::after { transform: rotate(-90deg); }
+      #touch .arm.right::after { transform: rotate(90deg); }
+      #touch .arm.on {
+        background: rgba(0, 255, 255, 0.55);
+      }
+      #touch .arm.on::after {
+        background: #fff;
+      }
+
+      /* FIRE: level with the D-pad's centre. Red for the firewand, cyan for ice. */
+      #touch .fire {
+        right: calc(var(--edge) + var(--sr));
+        bottom: calc(var(--edge) + var(--sb) + (var(--dpad) - var(--fire)) / 2);
+        width: var(--fire);
+        height: var(--fire);
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        -webkit-appearance: none;
+        appearance: none;
+        font: inherit;
+        font-size: 15px;
+        letter-spacing: 0.08em;
+        color: #fff;
+        --wc: 255, 0, 0;
+        background: rgba(var(--wc), 0.22);
+        box-shadow: inset 0 0 0 3px rgba(var(--wc), 0.75);
+      }
+      #touch .fire[data-wand='ice'] {
+        --wc: 0, 255, 255;
+      }
+      #touch .fire.on {
+        background: rgba(var(--wc), 0.6);
+      }
+      /* On a home (safe) screen the wand won't fire: dimmed, but still live for hauling stones. */
+      #touch .fire.safe {
+        opacity: 0.3;
+      }
+
+      /* Keys: Spectrum rubber. The big letters are the keys the canvas names. */
+      #touch .key {
+        -webkit-appearance: none;
+        appearance: none;
+        margin: 0;
+        border: 0;
+        padding: 0 10px;
+        min-width: 66px;
+        height: var(--kh);
+        border-radius: 7px;
+        font: inherit;
+        color: #fff;
+        background: #2b2b30;
+        box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.14);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        pointer-events: auto;
+      }
+      #touch .key b {
+        font-size: 14px;
+      }
+      #touch .key small {
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        color: #d7d7d7;
+      }
+      #touch .key.on {
+        background: #4b4b52;
+        transform: translateY(1px);
+      }
+      #touch .key.ghost {
+        visibility: hidden;
+      }
+      #touch .key[data-tint='yellow'] b { color: #ffff00; }
+      #touch .key[data-tint='magenta'] b { color: #ff00ff; }
+      #touch .key[data-tint='red'] b { color: #ff4040; }
+      #touch .key[data-tint='cyan'] b { color: #00ffff; }
+      #touch .key[data-tint='void'] {
+        background: transparent;
+        box-shadow: 0 0 0 1px #1e1e1e;
+      }
+      #touch .key[data-tint='void'] b { color: #333; }
+
+      /* The strip: menu keys along the bottom (portrait) or down the right
+         (landscape); in play it's just ESC, between the D-pad and FIRE. */
+      #touch .strip {
+        left: calc(var(--edge) + var(--sl));
+        right: calc(var(--edge) + var(--sr));
+        bottom: calc(var(--edge) * 2 + var(--sb));
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        pointer-events: none;
+      }
+      #touch[data-view='pad'] .strip {
+        bottom: calc(var(--edge) + var(--sb) + (var(--dpad) - 44px) / 2);
+      }
+      #touch[data-view='pad'] .key {
+        --kh: 44px;
+        min-width: 56px;
+        background: rgba(43, 43, 48, 0.6);
+      }
+      @media (orientation: landscape) {
+        body.touch #touch {
+          --kh: clamp(38px, 13dvh, 56px);
+        }
+        #touch[data-view='menu'] .strip {
+          left: auto;
+          bottom: auto;
+          top: 50%;
+          transform: translateY(-50%);
+          flex-direction: column;
+          flex-wrap: nowrap;
+          gap: 8px;
+        }
+        #touch[data-view='menu'] .key {
+          min-width: 72px;
+        }
+        #touch[data-view='pad'] .strip {
+          left: auto;
+          bottom: auto;
+          top: calc(var(--edge) + var(--st));
+        }
+      }
+
+      /* On-screen keyboard for hi-score initials (alpha) and seeds (digits). */
+      #touch .board {
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(var(--edge) + var(--sb));
+        width: min(calc(100vw - 2 * var(--edge) - var(--sl) - var(--sr)), 600px);
+        box-sizing: border-box;
+        padding: 8px;
+        border-radius: 10px;
+        background: rgba(12, 12, 14, 0.9);
+        box-shadow: 0 0 0 2px #2b2b30;
+        --kh: 46px;
+      }
+      @media (orientation: landscape) {
+        #touch .board {
+          --kh: clamp(30px, 9.5dvh, 46px);
+        }
+      }
+      #touch .readout {
+        padding: 2px 0 6px;
+        text-align: center;
+        font-size: 18px;
+        letter-spacing: 0.3em;
+        color: #ffff00;
+      }
+      #touch .row {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 5px;
+        margin-top: 5px;
+      }
+      #touch .board .key {
+        min-width: 0;
+        padding: 0;
       }
     </style>
   </head>
